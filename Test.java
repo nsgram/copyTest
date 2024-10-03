@@ -1,47 +1,72 @@
+import com.azure.identity.ClientSecretCredential;
+import com.azure.identity.ClientSecretCredentialBuilder;
+import com.azure.storage.blob.BlobServiceClient;
+import com.azure.storage.blob.BlobServiceClientBuilder;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+public class AzureBlobConfig {
+
+    @Value("${azure.storage.endpoint}")
+    private String endpoint;
+
+    @Value("${azure.client-id}")
+    private String clientId;
+
+    @Value("${azure.client-secret}")
+    private String clientSecret;
+
+    @Value("${azure.tenant-id}")
+    private String tenantId;
+
+    @Bean
+    public BlobServiceClient blobServiceClient() {
+        ClientSecretCredential clientSecretCredential = new ClientSecretCredentialBuilder()
+                .clientId(clientId)
+                .clientSecret(clientSecret)
+                .tenantId(tenantId)
+                .build();
+
+        return new BlobServiceClientBuilder()
+                .endpoint(endpoint)
+                .credential(clientSecretCredential)
+                .buildClient();
+    }
+}
+
+
+
+import com.azure.storage.blob.BlobClient;
 import com.azure.storage.blob.BlobContainerClient;
 import com.azure.storage.blob.BlobServiceClient;
-import com.azure.storage.blob.models.BlobHttpHeaders;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.codec.multipart.FilePart;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
 
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.nio.channels.Channels;
-
 @Service
-public class AzureStorageService {
+public class AzureBlobService {
 
-    @Autowired
-    private BlobServiceClient blobServiceClient;
+    private final BlobServiceClient blobServiceClient;
+    private final String containerName;
 
-    private final String containerName = "testcontainer";
+    public AzureBlobService(BlobServiceClient blobServiceClient, 
+                            @Value("${azure.storage.container-name}") String containerName) {
+        this.blobServiceClient = blobServiceClient;
+        this.containerName = containerName;
+    }
 
-    public Mono<String> uploadFile(FilePart filePart) {
-        BlobContainerClient blobContainerClient = blobServiceClient.getBlobContainerClient(containerName);
-        BlobClient blobClient = blobContainerClient.getBlobClient(filePart.filename());
+    public Mono<Void> uploadFile(FilePart filePart, String fileName) {
+        BlobContainerClient containerClient = blobServiceClient.getBlobContainerClient(containerName);
+        BlobClient blobClient = containerClient.getBlobClient(fileName);
 
-        // Convert Flux<DataBuffer> to byte[]
-        return filePart.content()
-            .reduce(new ByteArrayOutputStream(), (baos, dataBuffer) -> {
-                try {
-                    Channels.newChannel(baos).write(dataBuffer.asByteBuffer().asReadOnlyBuffer());
-                } catch (IOException e) {
-                    throw new RuntimeException(e);
-                }
-                return baos;
-            })
-            .flatMap(baos -> {
-                byte[] bytes = baos.toByteArray();
-                blobClient.upload(BinaryData.fromBytes(bytes), true);
-
-                // Set the content type
-                BlobHttpHeaders headers = new BlobHttpHeaders().setContentType(filePart.headers().getContentType().toString());
-                blobClient.setHttpHeaders(headers);
-
-                return Mono.just(blobClient.getBlobUrl());
-            })
-            .onErrorResume(e -> Mono.just("Upload failed: " + e.getMessage()));
+        return filePart
+                .transferTo(blobClient.getBlockBlobClient().getBlobOutputStream())
+                .then();
     }
 }
+
+
+
