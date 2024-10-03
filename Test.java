@@ -1,43 +1,3 @@
-import com.azure.identity.ClientSecretCredential;
-import com.azure.identity.ClientSecretCredentialBuilder;
-import com.azure.storage.blob.BlobServiceClient;
-import com.azure.storage.blob.BlobServiceClientBuilder;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
-
-@Configuration
-public class AzureBlobConfig {
-
-    @Value("${azure.storage.endpoint}")
-    private String endpoint;
-
-    @Value("${azure.client-id}")
-    private String clientId;
-
-    @Value("${azure.client-secret}")
-    private String clientSecret;
-
-    @Value("${azure.tenant-id}")
-    private String tenantId;
-
-    @Bean
-    public BlobServiceClient blobServiceClient() {
-        ClientSecretCredential clientSecretCredential = new ClientSecretCredentialBuilder()
-                .clientId(clientId)
-                .clientSecret(clientSecret)
-                .tenantId(tenantId)
-                .build();
-
-        return new BlobServiceClientBuilder()
-                .endpoint(endpoint)
-                .credential(clientSecretCredential)
-                .buildClient();
-    }
-}
-
-
-
 import com.azure.storage.blob.BlobClient;
 import com.azure.storage.blob.BlobContainerClient;
 import com.azure.storage.blob.BlobServiceClient;
@@ -45,6 +5,9 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.codec.multipart.FilePart;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Mono;
+import java.io.ByteArrayOutputStream;
+import java.nio.ByteBuffer;
+import reactor.core.publisher.Flux;
 
 @Service
 public class AzureBlobService {
@@ -62,11 +25,20 @@ public class AzureBlobService {
         BlobContainerClient containerClient = blobServiceClient.getBlobContainerClient(containerName);
         BlobClient blobClient = containerClient.getBlobClient(fileName);
 
-        return filePart
-                .transferTo(blobClient.getBlockBlobClient().getBlobOutputStream())
-                .then();
+        // Use the reactive dataBuffer stream from the FilePart object and transfer it to the blob output stream
+        return filePart.content()
+                .flatMap(dataBuffer -> {
+                    ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
+                    byte[] bytes = new byte[dataBuffer.readableByteCount()];
+                    dataBuffer.read(bytes);
+                    dataBuffer.release();
+                    byteArrayOutputStream.write(bytes, 0, bytes.length);
+
+                    // Now upload this chunk to Azure Blob
+                    return Mono.fromCallable(() -> {
+                        blobClient.getBlockBlobClient().upload(BinaryData.fromBytes(byteArrayOutputStream.toByteArray()), true);
+                        return true;
+                    }).then();
+                }).then();
     }
 }
-
-
-
