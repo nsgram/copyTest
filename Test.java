@@ -1,6 +1,8 @@
-import com.azure.storage.blob.BlobClient;
-import com.azure.storage.blob.BlobContainerClient;
+import com.azure.storage.blob.BlobContainerAsyncClient;
+import com.azure.storage.blob.BlobServiceClient;
+import com.azure.storage.blob.BlobServiceClientBuilder;
 import com.azure.storage.blob.models.BlobHttpHeaders;
+import com.azure.storage.blob.specialized.BlockBlobAsyncClient;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.codec.multipart.FilePart;
 import org.springframework.stereotype.Service;
@@ -15,18 +17,16 @@ public class AzureStorageService {
     private final String containerName = "testcontainer";
 
     public Mono<String> uploadFile(FilePart filePart) {
-        BlobContainerClient blobContainerClient = blobServiceClient.getBlobContainerClient(containerName);
-        BlobClient blobClient = blobContainerClient.getBlobClient(filePart.filename());
+        BlobContainerAsyncClient blobContainerAsyncClient = blobServiceClient.getBlobContainerAsyncClient(containerName);
+        BlockBlobAsyncClient blockBlobAsyncClient = blobContainerAsyncClient.getBlobAsyncClient(filePart.filename()).getBlockBlobAsyncClient();
 
-        // Upload the file using Azure's reactive upload method
-        return blobClient.upload(filePart.content(), true)
+        // Upload the file using Azure's reactive method
+        return blockBlobAsyncClient.upload(filePart.content(), filePart.headers().getContentLength(), true)
             .then(Mono.defer(() -> {
                 BlobHttpHeaders headers = new BlobHttpHeaders().setContentType(filePart.headers().getContentType().toString());
-                blobClient.setHttpHeaders(headers);
-                return Mono.just(blobClient.getBlobUrl());
+                return blockBlobAsyncClient.setHttpHeaders(headers)
+                    .then(Mono.just(blockBlobAsyncClient.getBlobUrl()));
             }))
-            .onErrorResume(e -> {
-                return Mono.just("Upload failed: " + e.getMessage());
-            });
+            .onErrorResume(e -> Mono.just("Upload failed: " + e.getMessage()));
     }
 }
