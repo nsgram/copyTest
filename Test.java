@@ -130,3 +130,27 @@ private void validateInput(String quoteId, String docTyp, String docCategory, St
     }
 }
 
+public void deleteFileByUrl(String fileUrl) throws IOException {
+    try {
+        // Parse the URL to extract the blob name (the path inside the container)
+        BlobUrlParts urlParts = BlobUrlParts.parse(fileUrl);
+        String blobName = urlParts.getBlobName(); // This gets the path like quoteId/docTyp/docCategory/docTitle
+
+        // Ensure that the Azure Blob service client and container client are initialized
+        BlobContainerClient blobContainerClient = blobServiceClient.getBlobContainerClient(containerName);
+
+        // Get the BlobClient for the file using the blob name
+        BlobClient blobClient = blobContainerClient.getBlobClient(blobName);
+
+        // Check if the file exists, then delete it
+        if (blobClient.exists()) {
+            blobClient.delete();
+            System.out.println("File deleted successfully.");
+        } else {
+            throw new FileNotFoundException("File not found at the given URL: " + fileUrl);
+        }
+    } catch (BlobStorageException e) {
+        // Re-throw specific Azure Blob exceptions or handle them appropriately
+        throw new IOException("Error deleting file from Azure Blob Storage: " + e.getMessage(), e);
+    }
+}
