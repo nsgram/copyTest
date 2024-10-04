@@ -1,130 +1,75 @@
-import org.springframework.web.multipart.MultipartFile;
-import org.springframework.core.io.FileSystemResource;
-import org.springframework.core.io.Resource;
-import org.springframework.web.reactive.function.server.FilePart;
+public String uploadFile(MultipartFile file, String quoteId, String docTyp, String docCategory, String docTitle)
+        throws IOException {
+    // Ensure that the Azure Blob service client and container client are initialized
+    BlobContainerClient blobContainerClient = blobServiceClient.getBlobContainerClient(containerName);
 
-import java.io.File;
-import java.io.IOException;
-import java.nio.file.Files;
+    // Define the "path" of the file inside the blob container, using docTitle as the file name
+    String blobFilePath = quoteId + "/" + docTyp + "/" + docCategory + "/" + docTitle;
 
-public MultipartFile getMultiPartFile(FilePart filePart) throws IOException {
-    // Create a temporary file to hold the uploaded content
-    File tempFile = File.createTempFile("temp", null);
-    // Copy the contents of the FilePart to the temporary file
-    filePart.transferTo(tempFile);
+    // Get the BlobClient for this file (using docTitle as the name of the file in this path)
+    BlobClient blobClient = blobContainerClient.getBlobClient(blobFilePath);
 
-    // Return the MultipartFile implementation
-    return new MultipartFile() {
-        @Override
-        public String getName() {
-            return filePart.filename();
-        }
+    try (InputStream inputStream = file.getInputStream()) {
+        // Upload the file input stream to Azure Blob Storage
+        blobClient.upload(inputStream, file.getSize(), true);
 
-        @Override
-        public String getOriginalFilename() {
-            return filePart.filename();
-        }
+        // Set the content type of the blob (file)
+        BlobHttpHeaders headers = new BlobHttpHeaders().setContentType(file.getContentType());
+        blobClient.setHttpHeaders(headers);
+    } catch (IOException | BlobStorageException e) {
+        // If any error occurs during upload, throw the exception to be handled by the calling method
+        throw new IOException("Error uploading file to Azure Blob Storage", e);
+    }
 
-        @Override
-        public String getContentType() {
-            return filePart.headers().getContentType().toString();
-        }
-
-        @Override
-        public boolean isEmpty() {
-            return tempFile.length() == 0;
-        }
-
-        @Override
-        public long getSize() {
-            return tempFile.length();
-        }
-
-        @Override
-        public byte[] getBytes() throws IOException {
-            return Files.readAllBytes(tempFile.toPath());
-        }
-
-        @Override
-        public InputStream getInputStream() throws IOException {
-            return Files.newInputStream(tempFile.toPath());
-        }
-
-        @Override
-        public void transferTo(File dest) throws IOException, IllegalStateException {
-            Files.copy(tempFile.toPath(), dest.toPath());
-        }
-    };
+    // Return the Blob URL after successful upload
+    return blobClient.getBlobUrl();
 }
 
 
+-------
+public String uploadFile(MultipartFile file, String quoteId, String docTyp, String docCategory, String docTitle)
+        throws IOException {
+    // Input validation to avoid any directory traversal or unsafe paths
+    validateInput(quoteId, docTyp, docCategory, docTitle);
 
+    // Ensure that the Azure Blob service client and container client are initialized
+    BlobContainerClient blobContainerClient = blobServiceClient.getBlobContainerClient(containerName);
 
+    // Define the "path" of the file inside the blob container, using docTitle as the file name
+    String blobFilePath = quoteId + "/" + docTyp + "/" + docCategory + "/" + docTitle;
 
+    // Get the BlobClient for this file (using docTitle as the name of the file in this path)
+    BlobClient blobClient = blobContainerClient.getBlobClient(blobFilePath);
 
-import org.springframework.core.io.FileSystemResource;
-import org.springframework.core.io.Resource;
-import org.springframework.web.multipart.MultipartFile;
-import org.springframework.web.reactive.function.server.FilePart;
+    if (blobClient.exists()) {
+        throw new FileAlreadyExistsException("File with the name " + docTitle + " already exists in the specified path.");
+    }
 
-import java.io.File;
-import java.io.IOException;
-import java.io.InputStream;
-import java.nio.file.Files;
+    try (InputStream inputStream = file.getInputStream()) {
+        // Upload the file input stream to Azure Blob Storage
+        blobClient.upload(inputStream, file.getSize(), true);
 
-public MultipartFile getMultiPartFile(FilePart filePart) throws IOException {
-    // Create a temporary file
-    File tempFile = File.createTempFile("temp", filePart.filename());
-    
-    // Transfer the contents of FilePart to the temporary file
-    filePart.transferTo(tempFile.toPath());
-    
-    // Return a MultipartFile implementation
-    return new MultipartFile() {
-        @Override
-        public String getName() {
-            return filePart.name(); // The name of the file part
-        }
+        // Set the content type of the blob (file)
+        BlobHttpHeaders headers = new BlobHttpHeaders().setContentType(file.getContentType());
+        blobClient.setHttpHeaders(headers);
+    } catch (BlobStorageException e) {
+        // Re-throw specific Azure Blob exceptions or handle them appropriately
+        throw new IOException("Error uploading file to Azure Blob Storage: " + e.getMessage(), e);
+    }
 
-        @Override
-        public String getOriginalFilename() {
-            return filePart.filename(); // The original filename
-        }
-
-        @Override
-        public String getContentType() {
-            return filePart.headers().getContentType().toString(); // Content type from headers
-        }
-
-        @Override
-        public boolean isEmpty() {
-            return tempFile.length() == 0; // Check if file is empty
-        }
-
-        @Override
-        public long getSize() {
-            return tempFile.length(); // Get the size of the file
-        }
-
-        @Override
-        public byte[] getBytes() throws IOException {
-            return Files.readAllBytes(tempFile.toPath()); // Read bytes from temp file
-        }
-
-        @Override
-        public InputStream getInputStream() throws IOException {
-            return Files.newInputStream(tempFile.toPath()); // Get input stream from temp file
-        }
-
-        @Override
-        public void transferTo(File dest) throws IOException, IllegalStateException {
-            Files.copy(tempFile.toPath(), dest.toPath()); // Transfer contents to destination
-        }
-    };
+    // Return the Blob URL after successful upload
+    return blobClient.getBlobUrl();
 }
 
-
-
-
-
-
+// Input validation method to sanitize inputs
+private void validateInput(String quoteId, String docTyp, String docCategory, String docTitle) throws IllegalArgumentException {
+    if (quoteId == null || quoteId.isEmpty() || docTyp == null || docTyp.isEmpty() ||
+        docCategory == null || docCategory.isEmpty() || docTitle == null || docTitle.isEmpty()) {
+        throw new IllegalArgumentException("Invalid input: One or more required parameters are missing or empty.");
+    }
+    // Add further validation as needed (e.g., only allow alphanumeric values to avoid security risks)
+    if (!quoteId.matches("[a-zA-Z0-9_-]+") || !docTyp.matches("[a-zA-Z0-9_-]+") ||
+        !docCategory.matches("[a-zA-Z0-9_-]+") || !docTitle.matches("[a-zA-Z0-9_.-]+")) {
+        throw new IllegalArgumentException("Invalid input: Inputs contain unsafe characters.");
+    }
+}
