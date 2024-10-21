@@ -1,5 +1,14 @@
-client_max_body_size 50M;
-proxy_buffering off;
-proxy_connect_timeout 600;
-proxy_read_timeout 600;
-proxy_send_timeout 600;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.http.codec.ServerCodecConfigurer;
+import org.springframework.web.reactive.config.EnableWebFlux;
+import org.springframework.web.reactive.config.WebFluxConfigurer;
+
+@Configuration
+@EnableWebFlux
+public class WebConfig implements WebFluxConfigurer {
+
+    @Override
+    public void configureHttpMessageCodecs(ServerCodecConfigurer configurer) {
+        configurer.defaultCodecs().maxInMemorySize(-1);
+    }
+}
