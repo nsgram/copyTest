@@ -81,6 +81,4 @@ WHERE (sellingAgent.QUOTE_SA_PROXY_ID ='294266'
     AND quote.expired_dt IS NULL
     AND status.status_typ_cd = 'QUOTE_STATUS'
     AND quote.quote_status_cd NOT LIKE 'DND_%'
-
-
-how to add ORDER BY quote.update_dts DESC
+ORDER BY quote.update_dts DESC;
