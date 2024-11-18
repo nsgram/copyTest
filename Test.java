@@ -1,152 +1,114 @@
-const joseLib = require("jose");
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.security.PrivateKey;
+import java.security.Security;
+import java.text.SimpleDateFormat;
+import java.util.Base64;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.Map;
 
-/*const { compactDecrypt } = require('jose/jwe/compact/decrypt')
-const { compactVerify } = require('jose/jws/compact/verify')*/
-const  crypto = require("crypto");
-const fs = require("fs");
-const jwt = require('jsonwebtoken');
-const { Console } = require('console');
+import com.nimbusds.jose.*;
+import com.nimbusds.jose.crypto.RSADecrypter;
+import com.nimbusds.jwt.SignedJWT;
 
-async function decrypt(){
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.SignatureAlgorithm;
+import io.jsonwebtoken.security.Keys;
 
-    /****  INPUTS **********/
-        //CLAIMS DMR VM AQE
-    var client ='DMR';
-    //Token is encrypted using Recipient Public Key and Signed with Sender Private Key
-    //jwe token received from the upload response
-    const jwe = 'Ag';
+public class DecryptAndSign {
 
-    //CLIENT PRIVATE KEY [Change path to the private Key of appropriate client]
-    const client_private_key = "keys_old/decrypted/private_dmr.pem";
-    /****  END OF INPUTS*****/
-
-
-    const privatekey = crypto.createPrivateKey(fs.readFileSync(client_private_key, 'utf8'))
-    const receiverprivatekeyread = fs.readFileSync(client_private_key, 'utf8');
-    /** decrypt **/
-    const { plaintext, protectedHeader } = await joseLib.compactDecrypt(jwe, privatekey)
-    const decoder = new TextDecoder()
-    console.log("t "+plaintext)
-
-    //READ THE JWT TOKEN      
-    let base64Url = (decoder.decode(plaintext)).split('.')[1]; // token you get
-    let base64 = base64Url.replace('-', '+').replace('_', '/');
-    let decodedData = JSON.parse(Buffer.from(base64, 'base64').toString('binary'));
-
-    console.log('PAYLOAD PLAINTEXT: ');
-    console.log(decodedData)
-
-    //GENERATE TOKEN WITH THE EXPECTED PAYLOAD FOR DOWNLOAD     
-    var h  = {"alg":"RS256", "typ":"JWT"};
-    if (client === "CLAIMS") {
-        h  = {"alg":"RS256", "typ":"JWT", "kid":"abc-e264-4028-9881-8c8cba20eb7c"};
-        //h  = {"alg":"RS256", "typ":"JWT", "kid":"abc-94df-4d6b-908a-13ee5dba900d"};
-    } else if (client === "DMR") {
-
-        h  = {"alg":"RS256", "typ":"JWT", "kid":"abc-49d3-4463-bd28-70efba817c1e"};
-    } else if (client === "VM") {
-
-        h  = {"alg":"RS256", "typ":"JWT", "kid":"abc-fMuT8N188cHHbE"};
-
-    }else if (client === "AQE"){
-
-        h  = {"alg":"RS256", "typ":"JWT", "kid":"abc-DMgpbbSDKV_0KTg"};
-    }else if (client === "CHAT"){
-
-        h  = {"alg":"RS256", "typ":"JWT", "kid":""};
+    public static void main(String[] args) {
+        try {
+            decrypt();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 
-    let currentTime = new Date().getTime();
-    let updatedTIme = new Date(currentTime + 2 * 60 * 60 * 1000);
+    public static void decrypt() throws Exception {
+        // Inputs
+        String client = "DMR";
+        String jweToken = "Ag"; // Example JWE token, replace with actual
+        String clientPrivateKeyPath = "keys_old/decrypted/private_dmr.pem";
 
-    var scannedpayload = {
-        cvs_av_file_ref: decodedData.cvs_av_file_ref,
-        "x-lob": "security-engineering",
-        "scope": "openid email",
-        jti: (Math.random() + 1).toString(36).substring(2),
-        aud: 'CVS-AVScan',
-        iss: 'Visit-Manager',
-        sub: 'download_bearer_token'
-    };
-    signOptions = {
-        algorithm:   "RS256",            // RSASSA options[ "RS256", "RS384", "RS512" ]      
-        header: h,
-        expiresIn: '3600s'
-    };
+        // Read private key from file
+        String privateKeyPem = new String(Files.readAllBytes(Paths.get(clientPrivateKeyPath)));
+        PrivateKey privateKey = PemUtils.getPrivateKeyFromPem(privateKeyPem);
 
-    console.log("");
-    console.log("INPUTS FOR THE DOWNLOAD CALL:");
-    console.log("");
-    console.log("FILE NAME:")
-    console.log(decodedData.cvs_av_file_ref);
-    console.log("")
-    console.log("BEARER TOKEN FOR DOWNLOAD:")
-    console.log(jwt.sign(scannedpayload, receiverprivatekeyread,signOptions));
+        // Decrypt the JWE token
+        JWEObject jweObject = JWEObject.parse(jweToken);
+        RSADecrypter decrypter = new RSADecrypter(privateKey);
+        jweObject.decrypt(decrypter);
+        String payload = jweObject.getPayload().toString();
 
+        System.out.println("Decrypted payload: " + payload);
+
+        // Decode JWT from the decrypted payload
+        String[] jwtParts = payload.split("\\.");
+        String base64UrlPayload = jwtParts[1];
+        String decodedPayload = new String(Base64.getUrlDecoder().decode(base64UrlPayload), StandardCharsets.UTF_8);
+
+        System.out.println("PAYLOAD PLAINTEXT: " + decodedPayload);
+
+        // Create header based on client
+        Map<String, Object> header = new HashMap<>();
+        header.put("alg", "RS256");
+        header.put("typ", "JWT");
+
+        switch (client) {
+            case "CLAIMS":
+                header.put("kid", "abc-e264-4028-9881-8c8cba20eb7c");
+                break;
+            case "DMR":
+                header.put("kid", "abc-49d3-4463-bd28-70efba817c1e");
+                break;
+            case "VM":
+                header.put("kid", "abc-fMuT8N188cHHbE");
+                break;
+            case "AQE":
+                header.put("kid", "abc-DMgpbbSDKV_0KTg");
+                break;
+            case "CHAT":
+                header.put("kid", "");
+                break;
+        }
+
+        // Create payload for download token
+        Map<String, Object> scannedPayload = new HashMap<>();
+        scannedPayload.put("cvs_av_file_ref", "example_file_ref"); // Replace with actual value
+        scannedPayload.put("x-lob", "security-engineering");
+        scannedPayload.put("scope", "openid email");
+        scannedPayload.put("jti", java.util.UUID.randomUUID().toString());
+        scannedPayload.put("aud", "CVS-AVScan");
+        scannedPayload.put("iss", "Visit-Manager");
+        scannedPayload.put("sub", "download_bearer_token");
+
+        // Sign the token
+        String jwtToken = Jwts.builder()
+                .setHeader(header)
+                .setClaims(scannedPayload)
+                .signWith(Keys.hmacShaKeyFor(privateKeyPem.getBytes()), SignatureAlgorithm.RS256)
+                .compact();
+
+        System.out.println("BEARER TOKEN FOR DOWNLOAD: " + jwtToken);
+    }
 }
 
-decrypt();
 
- joseLib = require("jose");
-/*const { compactDecrypt } = require('jose/jwe/compact/decrypt')const { compactVerify } = require('jose/jws/compact/verify')*/
-const  crypto = require("crypto");
-const fs = require("fs");
-const jwt = require('jsonwebtoken');
-const { Console } = require('console');
-async function decrypt(){
-  /****  INPUTS **********/        //CLAIMS DMR VM AQE
-  var client ='DMR';    //Token is encrypted using Recipient Public Key and Signed with Sender Private Key    //jwe token received from the upload response    
-  const jwe = 'eyJhbGciOiJSU0EtT0FFU'; 
-  //CLIENT PRIVATE KEY [Change path to the private Key of appropriate client] 
-  const client_private_key = "keys_old/decrypted/private_dmr.pem";
-  /****  END OF INPUTS*****/  
-  const privatekey = crypto.createPrivateKey(fs.readFileSync(client_private_key, 'utf8'))
-  const receiverprivatekeyread = fs.readFileSync(client_private_key, 'utf8');
-  /** decrypt **/ 
-  const { plaintext, protectedHeader } = await joseLib.compactDecrypt(jwe, privatekey)
-  const decoder = new TextDecoder()
-  console.log("t "+plaintext) 
-  //READ THE JWT TOKEN
-  let base64Url = (decoder.decode(plaintext)).split('.')[1];
-  // token you get    
-  let base64 = base64Url.replace('-', '+').replace('_', '/');
-  let decodedData = JSON.parse(Buffer.from(base64, 'base64').toString('binary')); 
-  console.log('PAYLOAD PLAINTEXT: ');
-  console.log(decodedData) 
-  //GENERATE TOKEN WITH THE EXPECTED PAYLOAD FOR DOWNLOAD
-  var h  = {"alg":"RS256", "typ":"JWT"};
-  if (client === "CLAIMS") { 
-    h  = {"alg":"RS256", "typ":"JWT", "kid":"abc-e264-4028-9881-8c8cba20eb7c"};  
-    //h  = {"alg":"RS256", "typ":"JWT", "kid":"abc-94df-4d6b-908a-13ee5dba900d"};   
-  } else if (client === "DMR") {
-    h  = {"alg":"RS256", "typ":"JWT", "kid":"abc-49d3-4463-bd28-70efba817c1e"};   
-  } else if (client === "VM") {  
-    h  = {"alg":"RS256", "typ":"JWT", "kid":"abc-fMuT8N188cHHbE"};  
-  }else if (client === "AQE"){   
-    h  = {"alg":"RS256", "typ":"JWT", "kid":"abc-DMgpbbSDKV_0KTg"}; 
-  }else if (client === "CHAT"){  
-    h  = {"alg":"RS256", "typ":"JWT", "kid":""}; 
-  }    let currentTime = new Date().getTime();
-  let updatedTIme = new Date(currentTime + 2 * 60 * 60 * 1000); 
-  var scannedpayload = { 
-    cvs_av_file_ref: decodedData.cvs_av_file_ref,
-    "x-lob": "security-engineering", 
-    "scope": "openid email", 
-    jti: (Math.random() + 1).toString(36).substring(2),
-    aud: 'CVS-AVScan',
-    iss: 'Visit-Manager',  
-    sub: 'download_bearer_token'
-  };    
-  signOptions = {   
-    algorithm:   "RS256",
-    // RSASSA options[ "RS256", "RS384", "RS512" ]
-    header: h, 
-    expiresIn: '3600s' 
-  };    console.log("");  
-  console.log("INPUTS FOR THE DOWNLOAD CALL:"); 
-  console.log(""); 
-  console.log("FILE NAME:")  
-  console.log(decodedData.cvs_av_file_ref); 
-  console.log("")  
-  console.log("BEARER TOKEN FOR DOWNLOAD:")  
-  console.log(jwt.sign(scannedpayload, receiverprivatekeyread,signOptions));}decrypt(); 
+<dependency>
+    <groupId>com.nimbusds</groupId>
+    <artifactId>nimbus-jose-jwt</artifactId>
+    <version>9.31</version>
+</dependency>
+<dependency>
+    <groupId>io.jsonwebtoken</groupId>
+    <artifactId>jjwt-api</artifactId>
+    <version>0.11.5</version>
+</dependency>
+<dependency>
+    <groupId>org.bouncycastle</groupId>
+    <artifactId>bcpkix-jdk15on</artifactId>
+    <version>1.70</version>
+</dependency>
