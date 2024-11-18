@@ -1,123 +1,97 @@
-const joseLib = require("jose");
+import java.util.Base64;
+import java.nio.charset.StandardCharsets;
+import java.io.FileOutputStream;
 
-/*const { compactDecrypt } = require('jose/jwe/compact/decrypt')
-const { compactVerify } = require('jose/jws/compact/verify')*/
-const  crypto = require("crypto");
-const fs = require("fs");
-const jwt = require('jsonwebtoken');
-const { Console } = require('console');
+public class AVScanFileEncrtption {
 
-async function decrypt(){
-
-    /****  INPUTS **********/
-        //CLAIMS DMR VM AQE
-    var client ='DMR';
-    //Token is encrypted using Recipient Public Key and Signed with Sender Private Key
-    //jwe token received from the upload response
-    const jwe = 'xxxx';
-
-    //CLIENT PRIVATE KEY [Change path to the private Key of appropriate client]
-    const client_private_key = "keys_old/decrypted/private_dmr.pem";
-    /****  END OF INPUTS*****/
-
-
-    const privatekey = crypto.createPrivateKey(fs.readFileSync(client_private_key, 'utf8'))
-    const receiverprivatekeyread = fs.readFileSync(client_private_key, 'utf8');
-    /** decrypt **/
-    const { plaintext, protectedHeader } = await joseLib.compactDecrypt(jwe, privatekey)
-    const decoder = new TextDecoder()
-    console.log("t "+plaintext)
-
-    //READ THE JWT TOKEN      
-    let base64Url = (decoder.decode(plaintext)).split('.')[1]; // token you get
-    let base64 = base64Url.replace('-', '+').replace('_', '/');
-    let decodedData = JSON.parse(Buffer.from(base64, 'base64').toString('binary'));
-
-    console.log('PAYLOAD PLAINTEXT: ');
-    console.log(decodedData)
-
-    //GENERATE TOKEN WITH THE EXPECTED PAYLOAD FOR DOWNLOAD     
-    var h  = {"alg":"RS256", "typ":"JWT"};
-    if (client === "CLAIMS") {
-        h  = {"alg":"RS256", "typ":"JWT", "kid":"abc-e264-4028-9881-8c8cba20eb7c"};
-        //h  = {"alg":"RS256", "typ":"JWT", "kid":"abc-94df-4d6b-908a-13ee5dba900d"};
-    } else if (client === "DMR") {
-
-        h  = {"alg":"RS256", "typ":"JWT", "kid":"abc-49d3-4463-bd28-70efba817c1e"};
-    } else if (client === "VM") {
-
-        h  = {"alg":"RS256", "typ":"JWT", "kid":"abc-fMuT8N188cHHbE"};
-
-    }else if (client === "AQE"){
-
-        h  = {"alg":"RS256", "typ":"JWT", "kid":"abc-DMgpbbSDKV_0KTg"};
-    }else if (client === "CHAT"){
-
-        h  = {"alg":"RS256", "typ":"JWT", "kid":""};
+    static {
+        Security.addProvider(new BouncyCastleProvider());
     }
 
-    let currentTime = new Date().getTime();
-    let updatedTIme = new Date(currentTime + 2 * 60 * 60 * 1000);
+    public static PrivateKey readPrivateKey() throws Exception {
+        String filePath = "C:\\Data\\ASGWY\\Documents\\recipient-np-private-key-asg.pem"; // Update with your file path
+        String privateKeyPEM = new String(Files.readAllBytes(Paths.get(filePath)));
 
-    var scannedpayload = {
-        cvs_av_file_ref: decodedData.cvs_av_file_ref,
-        "x-lob": "security-engineering",
-        "scope": "openid email",
-        jti: (Math.random() + 1).toString(36).substring(2),
-        aud: 'CVS-AVScan',
-        iss: 'Visit-Manager',
-        sub: 'download_bearer_token'
-    };
-    signOptions = {
-        algorithm:   "RS256",            // RSASSA options[ "RS256", "RS384", "RS512" ]      
-        header: h,
-        expiresIn: '3600s'
-    };
+        if (privateKeyPEM.contains("BEGIN RSA PRIVATE KEY")) {
+            return readPKCS1PrivateKey(filePath);
+        } else {
+            return readPKCS8PrivateKey(privateKeyPEM);
+        }
+    }
 
-    console.log("");
-    console.log("INPUTS FOR THE DOWNLOAD CALL:");
-    console.log("");
-    console.log("FILE NAME:")
-    console.log(decodedData.cvs_av_file_ref);
-    console.log("")
-    console.log("BEARER TOKEN FOR DOWNLOAD:")
-    console.log(jwt.sign(scannedpayload, receiverprivatekeyread,signOptions));
+    public static PrivateKey readPKCS1PrivateKey(String filePath) throws IOException {
+        try (PEMParser pemParser = new PEMParser(new FileReader(filePath))) {
+            Object object = pemParser.readObject();
 
+            if (object instanceof PEMKeyPair) {
+                JcaPEMKeyConverter converter = new JcaPEMKeyConverter().setProvider("BC");
+                return converter.getPrivateKey(((PEMKeyPair) object).getPrivateKeyInfo());
+            } else if (object instanceof PrivateKeyInfo) {
+                JcaPEMKeyConverter converter = new JcaPEMKeyConverter().setProvider("BC");
+                return converter.getPrivateKey((PrivateKeyInfo) object);
+            } else {
+                throw new IOException("Unsupported key format.");
+            }
+        }
+    }
+
+    private static PrivateKey readPKCS8PrivateKey(String privateKeyPEM) throws Exception {
+        privateKeyPEM = privateKeyPEM
+                .replace("-----BEGIN PRIVATE KEY-----", "")
+                .replace("-----END PRIVATE KEY-----", "")
+                .replaceAll("\\s+", "");
+
+        byte[] keyBytes = Base64.getDecoder().decode(privateKeyPEM);
+        PKCS8EncodedKeySpec keySpec = new PKCS8EncodedKeySpec(keyBytes);
+        KeyFactory keyFactory = KeyFactory.getInstance("RSA");
+        return keyFactory.generatePrivate(keySpec);
+    }
+
+    public static String decryptJWE(String jweString, PrivateKey privateKey) throws JOSEException, ParseException {
+        JWEObject jweObject = JWEObject.parse(jweString);
+        jweObject.decrypt(new RSADecrypter(privateKey));
+        return jweObject.getPayload().toString();
+    }
+
+    public static void main(String[] args) throws Exception {
+        PrivateKey privateKey = readPrivateKey();
+        String encryptedToken = "vvvvvv"; // Replace with actual JWE token
+        String decryptedPayload = decryptJWE(encryptedToken, privateKey);
+
+        System.out.println("Decrypted Payload: " + decryptedPayload);
+
+        // Clean the decrypted payload to remove unwanted characters and ensure proper padding
+        String cleanedPayload = cleanBase64String(decryptedPayload);
+
+        // Add padding if necessary
+        if (cleanedPayload.length() % 4 != 0) {
+            cleanedPayload += "=".repeat(4 - cleanedPayload.length() % 4); // Add padding
+        }
+
+        // Check if the string is Base64 and decode it
+        if (isBase64(cleanedPayload)) {
+            byte[] decodedBytes = Base64.getDecoder().decode(cleanedPayload);
+            
+            // Try to decode it as a UTF-8 string
+            String decodedString = new String(decodedBytes, StandardCharsets.UTF_8);
+            System.out.println("Decoded String: " + decodedString);
+        } else {
+            System.out.println("Decrypted payload is not valid Base64 encoded.");
+        }
+    }
+
+    // Helper method to clean non-Base64 characters from the string
+    public static String cleanBase64String(String input) {
+        return input.replaceAll("[^A-Za-z0-9+/=]", "");
+    }
+
+    // Helper method to check if a string is valid Base64
+    public static boolean isBase64(String str) {
+        try {
+            Base64.getDecoder().decode(str);
+            return true;
+        } catch (IllegalArgumentException e) {
+            return false;
+        }
+    }
 }
-
-decrypt();
-
- joseLib = require("jose");/*const { compactDecrypt } = require('jose/jwe/compact/decrypt')const { compactVerify } = require('jose/jws/compact/verify')*/const  crypto = require("crypto");
- const fs = require("fs");
- const jwt = require('jsonwebtoken');
- const { Console } = require('console');
- async function decrypt(){   
- /****  INPUTS **********/        //CLAIMS DMR VM AQE    var client ='DMR';
- //Token is encrypted using Recipient Public Key and Signed with Sender Private Key    //jwe token received from the upload response
- const jwe = 'cccc';    //CLIENT PRIVATE KEY [Change path to the private Key of appropriate client]
- const client_private_key = "keys_old/decrypted/private_dmr.pem";
- /****  END OF INPUTS*****/ 
- const privatekey = crypto.createPrivateKey(fs.readFileSync(client_private_key, 'utf8')) 
- const receiverprivatekeyread = fs.readFileSync(client_private_key, 'utf8'); 
- /** decrypt **/    const { plaintext, protectedHeader } = await joseLib.compactDecrypt(jwe, privatekey)    const decoder = new TextDecoder()
- console.log("t "+plaintext)    //READ THE JWT TOKEN   
- let base64Url = (decoder.decode(plaintext)).split('.')[1]; // token you get    let base64 = base64Url.replace('-', '+').replace('_', '/'); 
- let decodedData = JSON.parse(Buffer.from(base64, 'base64').toString('binary'));    console.log('PAYLOAD PLAINTEXT: ');  
- console.log(decodedData)    //GENERATE TOKEN WITH THE EXPECTED PAYLOAD FOR DOWNLOAD    
- var h  = {"alg":"RS256", "typ":"JWT"};    if (client === "CLAIMS") {        h  = {"alg":"RS256", "typ":"JWT", "kid":"abc-e264-4028-9881-8c8cba20eb7c"};   
- //h  = {"alg":"RS256", "typ":"JWT", "kid":"abc-94df-4d6b-908a-13ee5dba900d"};    } else if (client === "DMR") {   
- h  = {"alg":"RS256", "typ":"JWT", "kid":"abc-49d3-4463-bd28-70efba817c1e"};    } 
- else if (client === "VM") {        h  = {"alg":"RS256", "typ":"JWT", "kid":"abc-fMuT8N188cHHbE"};
- }else if (client === "AQE"){        h  = {"alg":"RS256", "typ":"JWT", "kid":"abc-DMgpbbSDKV_0KTg"}; 
- }else if (client === "CHAT"){        h  = {"alg":"RS256", "typ":"JWT", "kid":""};    } 
- let currentTime = new Date().getTime();    let updatedTIme = new Date(currentTime + 2 * 60 * 60 * 1000);    
- var scannedpayload = {        cvs_av_file_ref: decodedData.cvs_av_file_ref,        
- "x-lob": "security-engineering",        "scope": "openid email",      
- jti: (Math.random() + 1).toString(36).substring(2),        aud: 'CVS-AVScan',        iss: 'Visit-Manager',        sub: 'download_bearer_token'    }; 
- signOptions = {        algorithm:   "RS256",            // RSASSA options[ "RS256", "RS384", "RS512" ]              header: h,        expiresIn: '3600s'    }; 
- console.log("");  
- console.log("INPUTS FOR THE DOWNLOAD CALL:");    console.log("");    console.log("FILE NAME:")  
- console.log(decodedData.cvs_av_file_ref);  
- console.log("")   
- console.log("BEARER TOKEN FOR DOWNLOAD:")
- console.log(jwt.sign(scannedpayload, receiverprivatekeyread,signOptions));}decrypt(); 
