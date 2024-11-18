@@ -51,3 +51,15 @@ public class AVScanFileEncrtption {
         String decryptedPayload = decryptJWE(encryptedToken, privateKey);
         System.out.println("Decrypted Payload: " + decryptedPayload);
     }
+
+
+<dependency>   
+			<groupId>org.bouncycastle</groupId> 
+			<artifactId>bcpkix-jdk18on</artifactId>
+			 <version>1.79</version>
+		</dependency>
+<dependency>   
+			<groupId>org.bouncycastle</groupId> 
+			<artifactId>bcprov-jdk18on</artifactId>
+			 <version>1.79</version>
+		</dependency>
