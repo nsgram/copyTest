@@ -1,97 +1,117 @@
-import java.util.Base64;
 import java.nio.charset.StandardCharsets;
-import java.io.FileOutputStream;
+import java.security.*;
+import java.security.interfaces.RSAPrivateKey;
+import java.util.Base64;
+import org.json.JSONObject;
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.SignatureAlgorithm;
 
-public class AVScanFileEncrtption {
+public class TokenDecryptor {
 
-    static {
-        Security.addProvider(new BouncyCastleProvider());
-    }
-
-    public static PrivateKey readPrivateKey() throws Exception {
-        String filePath = "C:\\Data\\ASGWY\\Documents\\recipient-np-private-key-asg.pem"; // Update with your file path
-        String privateKeyPEM = new String(Files.readAllBytes(Paths.get(filePath)));
-
-        if (privateKeyPEM.contains("BEGIN RSA PRIVATE KEY")) {
-            return readPKCS1PrivateKey(filePath);
-        } else {
-            return readPKCS8PrivateKey(privateKeyPEM);
-        }
-    }
-
-    public static PrivateKey readPKCS1PrivateKey(String filePath) throws IOException {
-        try (PEMParser pemParser = new PEMParser(new FileReader(filePath))) {
-            Object object = pemParser.readObject();
-
-            if (object instanceof PEMKeyPair) {
-                JcaPEMKeyConverter converter = new JcaPEMKeyConverter().setProvider("BC");
-                return converter.getPrivateKey(((PEMKeyPair) object).getPrivateKeyInfo());
-            } else if (object instanceof PrivateKeyInfo) {
-                JcaPEMKeyConverter converter = new JcaPEMKeyConverter().setProvider("BC");
-                return converter.getPrivateKey((PrivateKeyInfo) object);
-            } else {
-                throw new IOException("Unsupported key format.");
-            }
-        }
-    }
-
-    private static PrivateKey readPKCS8PrivateKey(String privateKeyPEM) throws Exception {
-        privateKeyPEM = privateKeyPEM
-                .replace("-----BEGIN PRIVATE KEY-----", "")
-                .replace("-----END PRIVATE KEY-----", "")
-                .replaceAll("\\s+", "");
-
-        byte[] keyBytes = Base64.getDecoder().decode(privateKeyPEM);
-        PKCS8EncodedKeySpec keySpec = new PKCS8EncodedKeySpec(keyBytes);
-        KeyFactory keyFactory = KeyFactory.getInstance("RSA");
-        return keyFactory.generatePrivate(keySpec);
-    }
-
-    public static String decryptJWE(String jweString, PrivateKey privateKey) throws JOSEException, ParseException {
-        JWEObject jweObject = JWEObject.parse(jweString);
-        jweObject.decrypt(new RSADecrypter(privateKey));
-        return jweObject.getPayload().toString();
-    }
-
-    public static void main(String[] args) throws Exception {
-        PrivateKey privateKey = readPrivateKey();
-        String encryptedToken = "vvvvvv"; // Replace with actual JWE token
-        String decryptedPayload = decryptJWE(encryptedToken, privateKey);
-
-        System.out.println("Decrypted Payload: " + decryptedPayload);
-
-        // Clean the decrypted payload to remove unwanted characters and ensure proper padding
-        String cleanedPayload = cleanBase64String(decryptedPayload);
-
-        // Add padding if necessary
-        if (cleanedPayload.length() % 4 != 0) {
-            cleanedPayload += "=".repeat(4 - cleanedPayload.length() % 4); // Add padding
-        }
-
-        // Check if the string is Base64 and decode it
-        if (isBase64(cleanedPayload)) {
-            byte[] decodedBytes = Base64.getDecoder().decode(cleanedPayload);
-            
-            // Try to decode it as a UTF-8 string
-            String decodedString = new String(decodedBytes, StandardCharsets.UTF_8);
-            System.out.println("Decoded String: " + decodedString);
-        } else {
-            System.out.println("Decrypted payload is not valid Base64 encoded.");
-        }
-    }
-
-    // Helper method to clean non-Base64 characters from the string
-    public static String cleanBase64String(String input) {
-        return input.replaceAll("[^A-Za-z0-9+/=]", "");
-    }
-
-    // Helper method to check if a string is valid Base64
-    public static boolean isBase64(String str) {
+    public static void main(String[] args) {
         try {
-            Base64.getDecoder().decode(str);
-            return true;
-        } catch (IllegalArgumentException e) {
-            return false;
+            // Inputs
+            String client = "DMR"; // Set client type
+            String jwe = "xxxx";  // JWE token received in the upload response
+            String clientPrivateKeyPath = "keys_old/decrypted/private_dmr.pem"; // Private key for the client
+
+            // Decrypt the JWE token and extract payload
+            String payload = decryptJWE(jwe, clientPrivateKeyPath);
+            System.out.println("Payload from JWE: " + payload);
+
+            // Parse the JWT token
+            String jwtPayload = decodeJWT(payload);
+            System.out.println("Decoded JWT Payload: " + jwtPayload);
+
+            // Generate a new JWT with the expected payload for download
+            String downloadToken = generateDownloadToken(jwtPayload, client, clientPrivateKeyPath);
+            System.out.println("Download Bearer Token: " + downloadToken);
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    // Decrypt the JWE token using the RSA private key
+    private static String decryptJWE(String jwe, String privateKeyPath) throws Exception {
+        // For simplicity, we'll simulate decryption of JWE.
+        // In a real application, you'd need a JWE decryption library like Nimbus JOSE + JWT.
+        // For now, assuming that the JWE payload is the base64-encoded JWT token.
+        String decryptedPayload = new String(Base64.getDecoder().decode(jwe), StandardCharsets.UTF_8);
+        return decryptedPayload;
+    }
+
+    // Decode the JWT and extract the payload (without validation)
+    private static String decodeJWT(String token) throws Exception {
+        // Split the JWT to extract the payload (the middle part of JWT)
+        String[] parts = token.split("\\.");
+        String base64Url = parts[1];
+
+        // Decode from base64 to JSON
+        String base64 = base64Url.replace('-', '+').replace('_', '/');
+        byte[] decodedBytes = Base64.getDecoder().decode(base64);
+        return new String(decodedBytes, StandardCharsets.UTF_8);
+    }
+
+    // Generate a new JWT with the provided payload and sign it with RS256 algorithm
+    private static String generateDownloadToken(String jwtPayload, String client, String privateKeyPath) throws Exception {
+        // Define JWT headers based on the client
+        String kid = getKidForClient(client);
+        String header = "{\"alg\":\"RS256\",\"typ\":\"JWT\",\"kid\":\"" + kid + "\"}";
+
+        // Parse the decoded JWT payload
+        JSONObject decodedData = new JSONObject(jwtPayload);
+
+        // Prepare the payload for the download token
+        JSONObject payload = new JSONObject();
+        payload.put("cvs_av_file_ref", decodedData.getString("cvs_av_file_ref"));
+        payload.put("x-lob", "security-engineering");
+        payload.put("scope", "openid email");
+        payload.put("jti", Math.random() + 1);
+        payload.put("aud", "CVS-AVScan");
+        payload.put("iss", "Visit-Manager");
+        payload.put("sub", "download_bearer_token");
+
+        // Load the private key to sign the JWT
+        PrivateKey privateKey = loadPrivateKey(privateKeyPath);
+
+        // Sign the JWT with RS256
+        return Jwts.builder()
+                .setHeaderParam("kid", kid)
+                .setPayload(payload.toString())
+                .signWith(privateKey, SignatureAlgorithm.RS256)
+                .compact();
+    }
+
+    // Load the private key from the given file path
+    private static PrivateKey loadPrivateKey(String privateKeyPath) throws Exception {
+        // Read the private key file
+        String privateKeyContent = new String(java.nio.file.Files.readAllBytes(java.nio.file.Paths.get(privateKeyPath)), StandardCharsets.UTF_8);
+
+        // Remove the first and last lines (-----BEGIN PRIVATE KEY----- and -----END PRIVATE KEY-----)
+        privateKeyContent = privateKeyContent.replace("-----BEGIN PRIVATE KEY-----", "").replace("-----END PRIVATE KEY-----", "").replaceAll("\\s", "");
+
+        // Decode the private key and generate the RSAPrivateKey
+        byte[] encoded = Base64.getDecoder().decode(privateKeyContent);
+        KeyFactory keyFactory = KeyFactory.getInstance("RSA");
+        return keyFactory.generatePrivate(new PKCS8EncodedKeySpec(encoded));
+    }
+
+    // Get the "kid" (key ID) based on the client type
+    private static String getKidForClient(String client) {
+        switch (client) {
+            case "CLAIMS":
+                return "abc-e264-4028-9881-8c8cba20eb7c";
+            case "DMR":
+                return "abc-49d3-4463-bd28-70efba817c1e";
+            case "VM":
+                return "abc-fMuT8N188cHHbE";
+            case "AQE":
+                return "abc-DMgpbbSDKV_0KTg";
+            case "CHAT":
+                return "";
+            default:
+                return "";
         }
     }
 }
