@@ -1,58 +1,57 @@
-import java.nio.charset.StandardCharsets;
+import com.nimbusds.jose.JOSEException;
+import com.nimbusds.jose.JWEObject;
+import com.nimbusds.jose.crypto.RSADecrypter;
+import com.nimbusds.jwt.JWTClaimsSet;
+import com.nimbusds.jwt.SignedJWT;
+
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.security.PrivateKey;
-import java.security.Security;
-import java.text.SimpleDateFormat;
 import java.util.Base64;
 import java.util.Date;
+import java.util.UUID;
 import java.util.HashMap;
 import java.util.Map;
 
-import com.nimbusds.jose.*;
-import com.nimbusds.jose.crypto.RSADecrypter;
-import com.nimbusds.jwt.SignedJWT;
+public class DecryptJWE {
 
-import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.SignatureAlgorithm;
-import io.jsonwebtoken.security.Keys;
-
-public class DecryptAndSign {
-
-    public static void main(String[] args) {
-        try {
-            decrypt();
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-
-    public static void decrypt() throws Exception {
+    public static void main(String[] args) throws Exception {
         // Inputs
-        String client = "DMR";
-        String jweToken = "Ag"; // Example JWE token, replace with actual
+        String client = "DMR"; 
+        String jwe = "eyJhbGciOiJSU0EtT0FFU...";
         String clientPrivateKeyPath = "keys_old/decrypted/private_dmr.pem";
 
-        // Read private key from file
+        // Load Private Key
         String privateKeyPem = new String(Files.readAllBytes(Paths.get(clientPrivateKeyPath)));
         PrivateKey privateKey = PemUtils.getPrivateKeyFromPem(privateKeyPem);
 
-        // Decrypt the JWE token
-        JWEObject jweObject = JWEObject.parse(jweToken);
-        RSADecrypter decrypter = new RSADecrypter(privateKey);
-        jweObject.decrypt(decrypter);
-        String payload = jweObject.getPayload().toString();
+        // Decrypt JWE Token
+        JWEObject jweObject = JWEObject.parse(jwe);
+        jweObject.decrypt(new RSADecrypter(privateKey));
+        String plaintext = jweObject.getPayload().toString();
 
-        System.out.println("Decrypted payload: " + payload);
+        // Parse JWT
+        SignedJWT signedJWT = SignedJWT.parse(plaintext);
+        JWTClaimsSet claimsSet = signedJWT.getJWTClaimsSet();
+        System.out.println("Payload: " + claimsSet.toJSONObject());
 
-        // Decode JWT from the decrypted payload
-        String[] jwtParts = payload.split("\\.");
-        String base64UrlPayload = jwtParts[1];
-        String decodedPayload = new String(Base64.getUrlDecoder().decode(base64UrlPayload), StandardCharsets.UTF_8);
+        // Generate Download Token
+        Map<String, Object> header = getHeader(client);
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("cvs_av_file_ref", claimsSet.getStringClaim("cvs_av_file_ref"));
+        payload.put("x-lob", "security-engineering");
+        payload.put("scope", "openid email");
+        payload.put("jti", UUID.randomUUID().toString());
+        payload.put("aud", "CVS-AVScan");
+        payload.put("iss", "Visit-Manager");
+        payload.put("sub", "download_bearer_token");
 
-        System.out.println("PAYLOAD PLAINTEXT: " + decodedPayload);
+        String token = JwtUtils.createJwt(payload, header, privateKey);
+        System.out.println("Generated Download Token: " + token);
+    }
 
-        // Create header based on client
+    private static Map<String, Object> getHeader(String client) {
         Map<String, Object> header = new HashMap<>();
         header.put("alg", "RS256");
         header.put("typ", "JWT");
@@ -75,40 +74,55 @@ public class DecryptAndSign {
                 break;
         }
 
-        // Create payload for download token
-        Map<String, Object> scannedPayload = new HashMap<>();
-        scannedPayload.put("cvs_av_file_ref", "example_file_ref"); // Replace with actual value
-        scannedPayload.put("x-lob", "security-engineering");
-        scannedPayload.put("scope", "openid email");
-        scannedPayload.put("jti", java.util.UUID.randomUUID().toString());
-        scannedPayload.put("aud", "CVS-AVScan");
-        scannedPayload.put("iss", "Visit-Manager");
-        scannedPayload.put("sub", "download_bearer_token");
+        return header;
+    }
+}
+import java.io.StringReader;
+import java.security.KeyFactory;
+import java.security.PrivateKey;
+import java.security.spec.PKCS8EncodedKeySpec;
 
-        // Sign the token
-        String jwtToken = Jwts.builder()
-                .setHeader(header)
-                .setClaims(scannedPayload)
-                .signWith(Keys.hmacShaKeyFor(privateKeyPem.getBytes()), SignatureAlgorithm.RS256)
-                .compact();
+import org.bouncycastle.util.io.pem.PemObject;
+import org.bouncycastle.util.io.pem.PemReader;
 
-        System.out.println("BEARER TOKEN FOR DOWNLOAD: " + jwtToken);
+public class PemUtils {
+
+    public static PrivateKey getPrivateKeyFromPem(String pemContent) throws Exception {
+        PemReader pemReader = new PemReader(new StringReader(pemContent));
+        PemObject pemObject = pemReader.readPemObject();
+        byte[] content = pemObject.getContent();
+        pemReader.close();
+
+        PKCS8EncodedKeySpec keySpec = new PKCS8EncodedKeySpec(content);
+        KeyFactory kf = KeyFactory.getInstance("RSA");
+        return kf.generatePrivate(keySpec);
     }
 }
 
 
-<dependency>
-    <groupId>com.nimbusds</groupId>
-    <artifactId>nimbus-jose-jwt</artifactId>
-    <version>9.31</version>
-</dependency>
-<dependency>
-    <groupId>io.jsonwebtoken</groupId>
-    <artifactId>jjwt-api</artifactId>
-    <version>0.11.5</version>
-</dependency>
-<dependency>
-    <groupId>org.bouncycastle</groupId>
-    <artifactId>bcpkix-jdk15on</artifactId>
-    <version>1.70</version>
-</dependency>
+import com.nimbusds.jose.JWSHeader;
+import com.nimbusds.jose.JWSObject;
+import com.nimbusds.jose.crypto.RSASSASigner;
+
+import java.security.PrivateKey;
+import java.util.Date;
+import java.util.Map;
+
+public class JwtUtils {
+
+    public static String createJwt(Map<String, Object> payload, Map<String, Object> header, PrivateKey privateKey) throws Exception {
+        JWSHeader jwsHeader = new JWSHeader.Builder(JWSHeader.parse(header)).build();
+        JWSObject jwsObject = new JWSObject(jwsHeader, new com.nimbusds.jose.Payload(payload));
+
+        jwsObject.sign(new RSASSASigner(privateKey));
+        return jwsObject.serialize();
+    }
+}
+
+
+
+
+
+
+
+
