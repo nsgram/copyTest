@@ -8,6 +8,6 @@
 
 downloadKey = x1Pq1RWnxzo9D0Xkqy12mwsbrvcsNkD
 
-I Have to create file in tempDir using referece of "file" String and downloadKey
+I Have to create file in tempDir using referece of "file" String into byte and downloadKey
 
 consider AES256 decrypt alogrithm generate code in Java17 and springboot 3
