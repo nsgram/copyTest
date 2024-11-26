@@ -1,5 +1,4 @@
-import org.springframework.util.Base64Utils;
-
+import java.util.Base64;
 import javax.crypto.Cipher;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
@@ -24,7 +23,7 @@ public class AESFileDecryptor {
 
     public static File saveDecryptedFile(String base64File, String downloadKey) throws Exception {
         // Step 1: Decode the Base64 string
-        byte[] encryptedBytes = Base64Utils.decodeFromString(base64File);
+        byte[] encryptedBytes = Base64.getDecoder().decode(base64File);
 
         // Step 2: Decrypt using AES-256
         byte[] decryptedBytes = decryptAES(encryptedBytes, downloadKey);
