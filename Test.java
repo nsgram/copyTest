@@ -2,7 +2,6 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.http.MediaType;
 import org.springframework.web.reactive.function.client.WebClient;
-import reactor.core.publisher.Mono;
 
 import javax.crypto.Cipher;
 import java.io.File;
@@ -39,7 +38,7 @@ public class FileUploadClient {
                     .build();
 
             // Build and send the POST request
-            Mono<FileUploadDto> response = webClient.post()
+            FileUploadDto response = webClient.post()
                     .uri("/file")
                     .contentType(MediaType.MULTIPART_FORM_DATA)
                     .bodyValue(builder -> {
@@ -59,13 +58,12 @@ public class FileUploadClient {
                                 .header("Content-Type", "application/pdf");
                     })
                     .retrieve()
-                    .bodyToMono(FileUploadDto.class);
+                    .bodyToMono(FileUploadDto.class)
+                    .block(); // Convert Mono to FileUploadDto synchronously
 
-            // Process the response
-            response.subscribe(dto -> {
-                System.out.println("File uploaded successfully:");
-                System.out.println(dto);
-            });
+            // Print the response
+            System.out.println("File uploaded successfully:");
+            System.out.println(response);
 
             // Cleanup temporary file
             tempFile.deleteOnExit();
