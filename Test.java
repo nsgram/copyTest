@@ -1,56 +1,66 @@
-import java.util.Base64;
 import javax.crypto.Cipher;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
 import javax.crypto.spec.IvParameterSpec;
-import java.io.File;
-import java.io.FileOutputStream;
 import java.nio.file.Files;
-import java.security.MessageDigest;
-import java.util.Arrays;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
+import java.util.Base64;
 
-public class AESFileDecryptor {
+public class FileProcessor {
 
-    public static void main(String[] args) throws Exception {
-        // Input data
-        String base64File = "U2FsdGVXXXXXXXXXXXXXXXXXXXX";
-        String downloadKey = "x1Pq1RWnxzo9D0Xkqy12mwsbrvcsNkD";
+    // AES Decryption method
+    public static byte[] decryptFile(String encryptedData, String downloadKey) throws Exception {
+        // Decode the Base64 strings
+        byte[] encryptedBytes = Base64.getDecoder().decode(encryptedData);
+        byte[] keyBytes = downloadKey.getBytes();
 
-        // Decrypt the file and save to temp directory
-        File tempFile = saveDecryptedFile(base64File, downloadKey);
-        System.out.println("Decrypted file saved at: " + tempFile.getAbsolutePath());
+        // Ensure the key is 256-bit
+        if (keyBytes.length != 32) {
+            throw new IllegalArgumentException("Invalid key size. Key must be 32 bytes (256 bits).");
+        }
+
+        // Create AES SecretKey
+        SecretKey secretKey = new SecretKeySpec(keyBytes, "AES");
+
+        // Use a zero IV for simplicity (adjust as per your encryption method)
+        byte[] iv = new byte[16]; // IV is 16 bytes for AES (default to zeros)
+        IvParameterSpec ivSpec = new IvParameterSpec(iv);
+
+        // Initialize the Cipher
+        Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
+        cipher.init(Cipher.DECRYPT_MODE, secretKey, ivSpec);
+
+        // Decrypt the data
+        return cipher.doFinal(encryptedBytes);
     }
 
-    public static File saveDecryptedFile(String base64File, String downloadKey) throws Exception {
-        // Step 1: Decode the Base64 string
-        byte[] encryptedBytes = Base64.getDecoder().decode(base64File);
+    // Write the decrypted bytes to a temporary file
+    public static Path writeToTempFile(byte[] data, String fileName) throws Exception {
+        Path tempDir = Files.createTempDirectory("tempFiles");
+        Path tempFile = tempDir.resolve(fileName);
 
-        // Step 2: Decrypt using AES-256
-        byte[] decryptedBytes = decryptAES(encryptedBytes, downloadKey);
-
-        // Step 3: Write to a temporary file
-        File tempFile = Files.createTempFile("decrypted-file-", ".tmp").toFile();
-        try (FileOutputStream fos = new FileOutputStream(tempFile)) {
-            fos.write(decryptedBytes);
-        }
+        // Write the bytes to the file
+        Files.write(tempFile, data, StandardOpenOption.CREATE);
 
         return tempFile;
     }
 
-    public static byte[] decryptAES(byte[] encryptedBytes, String key) throws Exception {
-        // Generate a 256-bit key from the provided downloadKey
-        MessageDigest sha = MessageDigest.getInstance("SHA-256");
-        byte[] keyBytes = sha.digest(key.getBytes("UTF-8"));
+    public static void main(String[] args) {
+        try {
+            // Sample input
+            String encryptedFile = "U2FsdGVXXXXXXXXXXXXXXXXXXXX"; // Example Base64 encrypted string
+            String downloadKey = "x1Pq1RWnxzo9D0Xkqy12mwsbrvcsNkD";
 
-        // Use the first 16 bytes of the key for the IV (Initialization Vector)
-        IvParameterSpec iv = new IvParameterSpec(Arrays.copyOfRange(keyBytes, 0, 16));
-        SecretKey secretKey = new SecretKeySpec(keyBytes, "AES");
+            // Decrypt the file
+            byte[] decryptedBytes = decryptFile(encryptedFile, downloadKey);
 
-        // Initialize AES Cipher in CBC mode with PKCS5Padding
-        Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
-        cipher.init(Cipher.DECRYPT_MODE, secretKey, iv);
+            // Write the decrypted content to a temporary file
+            Path tempFilePath = writeToTempFile(decryptedBytes, "decryptedFile.txt");
 
-        // Perform decryption
-        return cipher.doFinal(encryptedBytes);
+            System.out.println("File created at: " + tempFilePath.toAbsolutePath());
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 }
