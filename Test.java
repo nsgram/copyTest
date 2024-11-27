@@ -1,66 +1,91 @@
-import javax.crypto.Cipher;
-import javax.crypto.SecretKey;
-import javax.crypto.spec.SecretKeySpec;
-import javax.crypto.spec.IvParameterSpec;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
-import java.util.Base64;
+import org.springframework.core.io.FileSystemResource;
+import org.springframework.http.MediaType;
+import org.springframework.web.reactive.function.client.WebClient;
 
-public class FileProcessor {
-
-    // AES Decryption method
-    public static byte[] decryptFile(String encryptedData, String downloadKey) throws Exception {
-        // Decode the Base64 strings
-        byte[] encryptedBytes = Base64.getDecoder().decode(encryptedData);
-        byte[] keyBytes = downloadKey.getBytes();
-
-        // Ensure the key is 256-bit
-        if (keyBytes.length != 32) {
-            throw new IllegalArgumentException("Invalid key size. Key must be 32 bytes (256 bits).");
-        }
-
-        // Create AES SecretKey
-        SecretKey secretKey = new SecretKeySpec(keyBytes, "AES");
-
-        // Use a zero IV for simplicity (adjust as per your encryption method)
-        byte[] iv = new byte[16]; // IV is 16 bytes for AES (default to zeros)
-        IvParameterSpec ivSpec = new IvParameterSpec(iv);
-
-        // Initialize the Cipher
-        Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
-        cipher.init(Cipher.DECRYPT_MODE, secretKey, ivSpec);
-
-        // Decrypt the data
-        return cipher.doFinal(encryptedBytes);
-    }
-
-    // Write the decrypted bytes to a temporary file
-    public static Path writeToTempFile(byte[] data, String fileName) throws Exception {
-        Path tempDir = Files.createTempDirectory("tempFiles");
-        Path tempFile = tempDir.resolve(fileName);
-
-        // Write the bytes to the file
-        Files.write(tempFile, data, StandardOpenOption.CREATE);
-
-        return tempFile;
-    }
+public class FileUploadClient {
 
     public static void main(String[] args) {
         try {
-            // Sample input
-            String encryptedFile = "U2FsdGVXXXXXXXXXXXXXXXXXXXX"; // Example Base64 encrypted string
-            String downloadKey = "x1Pq1RWnxzo9D0Xkqy12mwsbrvcsNkD";
+            // Example: Temporary file to simulate the upload
+            File tempFile = new File("path/to/temp/file.pdf");
 
-            // Decrypt the file
-            byte[] decryptedBytes = decryptFile(encryptedFile, downloadKey);
+            // Initialize WebClient
+            WebClient webClient = WebClient.builder()
+                    .baseUrl("https://devquote-svc.aetna.com/asgwy-api/v1/quote")
+                    .build();
 
-            // Write the decrypted content to a temporary file
-            Path tempFilePath = writeToTempFile(decryptedBytes, "decryptedFile.txt");
+            // Build and send the POST request
+            Mono<FileUploadResponse> response = webClient.post()
+                    .uri("/file")
+                    .contentType(MediaType.MULTIPART_FORM_DATA)
+                    .bodyValue(builder -> {
+                        builder.field("docSubcategory", "SBC");
+                        builder.field("quoteMissinfoDocInd", "N");
+                        builder.field("quoteConcessDocInd", "N");
+                        builder.field("uploadedUsrId", "N993527");
+                        builder.field("docTyp", "SG");
+                        builder.field("uploadedUsrNm", "FirstName LastName");
+                        builder.field("docCategory", "RC");
+                        builder.field("quoteId", "369");
+                        builder.field("docSize", "291");
+                        builder.field("docQuoteStage", "INITIAL");
+                        builder.field("quoteSubmitDocInd", "Y");
+                        builder.field("quoteConcessionId", "21");
+                        builder.part("file", new FileSystemResource(tempFile))
+                                .header("Content-Type", "application/pdf");
+                    })
+                    .retrieve()
+                    .bodyToMono(FileUploadResponse.class);
 
-            System.out.println("File created at: " + tempFilePath.toAbsolutePath());
+            // Process the response
+            response.subscribe(resp -> {
+                System.out.println("File uploaded successfully:");
+                System.out.println(resp);
+            });
+
         } catch (Exception e) {
             e.printStackTrace();
+        }
+    }
+
+    // FileUploadResponse is the DTO class to map the server response.
+    public static class FileUploadResponse {
+        private String statusCode;
+        private String statusDescription;
+        private String conversationID;
+
+        // Getters and Setters
+        public String getStatusCode() {
+            return statusCode;
+        }
+
+        public void setStatusCode(String statusCode) {
+            this.statusCode = statusCode;
+        }
+
+        public String getStatusDescription() {
+            return statusDescription;
+        }
+
+        public void setStatusDescription(String statusDescription) {
+            this.statusDescription = statusDescription;
+        }
+
+        public String getConversationID() {
+            return conversationID;
+        }
+
+        public void setConversationID(String conversationID) {
+            this.conversationID = conversationID;
+        }
+
+        @Override
+        public String toString() {
+            return "FileUploadResponse{" +
+                    "statusCode='" + statusCode + '\'' +
+                    ", statusDescription='" + statusDescription + '\'' +
+                    ", conversationID='" + conversationID + '\'' +
+                    '}';
         }
     }
 }
