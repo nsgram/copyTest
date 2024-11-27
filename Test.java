@@ -1,6 +1,11 @@
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.http.MediaType;
 import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
+
+import java.io.File;
 
 public class FileUploadClient {
 
@@ -14,41 +19,43 @@ public class FileUploadClient {
                     .baseUrl("https://devquote-svc.aetna.com/asgwy-api/v1/quote")
                     .build();
 
+            // Prepare multipart form data
+            MultiValueMap<String, Object> formData = new LinkedMultiValueMap<>();
+            formData.add("docSubcategory", "SBC");
+            formData.add("quoteMissinfoDocInd", "N");
+            formData.add("quoteConcessDocInd", "N");
+            formData.add("uploadedUsrId", "N993527");
+            formData.add("docTyp", "SG");
+            formData.add("uploadedUsrNm", "FirstName LastName");
+            formData.add("docCategory", "RC");
+            formData.add("quoteId", "369");
+            formData.add("docSize", "291");
+            formData.add("docQuoteStage", "INITIAL");
+            formData.add("quoteSubmitDocInd", "Y");
+            formData.add("quoteConcessionId", "21");
+            formData.add("file", new FileSystemResource(tempFile));
+
             // Build and send the POST request
-            Mono<FileUploadResponse> response = webClient.post()
+            ResponseEntity<FileUploadResponse> response = webClient.post()
                     .uri("/file")
                     .contentType(MediaType.MULTIPART_FORM_DATA)
-                    .bodyValue(builder -> {
-                        builder.field("docSubcategory", "SBC");
-                        builder.field("quoteMissinfoDocInd", "N");
-                        builder.field("quoteConcessDocInd", "N");
-                        builder.field("uploadedUsrId", "N993527");
-                        builder.field("docTyp", "SG");
-                        builder.field("uploadedUsrNm", "FirstName LastName");
-                        builder.field("docCategory", "RC");
-                        builder.field("quoteId", "369");
-                        builder.field("docSize", "291");
-                        builder.field("docQuoteStage", "INITIAL");
-                        builder.field("quoteSubmitDocInd", "Y");
-                        builder.field("quoteConcessionId", "21");
-                        builder.part("file", new FileSystemResource(tempFile))
-                                .header("Content-Type", "application/pdf");
-                    })
+                    .bodyValue(formData)
                     .retrieve()
-                    .bodyToMono(FileUploadResponse.class);
+                    .toEntity(FileUploadResponse.class)
+                    .block(); // For synchronous execution
 
             // Process the response
-            response.subscribe(resp -> {
-                System.out.println("File uploaded successfully:");
-                System.out.println(resp);
-            });
+            System.out.println("File uploaded successfully:");
+            System.out.println(response);
 
+        } catch (WebClientResponseException e) {
+            System.err.println("Error response from server: " + e.getResponseBodyAsString());
         } catch (Exception e) {
             e.printStackTrace();
         }
     }
 
-    // FileUploadResponse is the DTO class to map the server response.
+    // DTO class for response mapping
     public static class FileUploadResponse {
         private String statusCode;
         private String statusDescription;
