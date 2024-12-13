@@ -1,25 +1,43 @@
-JsonNode downloadJson = builder.build()
-        .method(HttpMethod.GET)
-        .uri(t -> t.host("https://sit1-api.cvshealth.com")
-                   .path("/file/scan/download/v1/files")
-                   .build(fileReference))
-        .headers(t -> t.addAll(headers))
-        .retrieve()
-        .onStatus(
-            status -> !status.is2xxSuccessful(),
-            errorResponse -> errorResponse.bodyToMono(String.class).flatMap(errorBody -> {
-                log.error("Exception from Plansponsor API: " + errorBody);
-                throw new RoutingException(errorBody);
-            })
-        )
-        .bodyToMono(String.class) // First get as String
-        .flatMap(body -> {
-            if (MediaType.APPLICATION_JSON_VALUE.equals(headers.getContentType())) {
-                return Mono.just(new ObjectMapper().readTree(body)); // Parse JSON if applicable
-            } else {
-                log.error("Unexpected response content type");
-                throw new UnsupportedOperationException("Unexpected content type");
-            }
-        })
-        .toFuture()
-        .get();
+@Bean
+public CorsWebFilter corsWebFilter() {
+    CorsConfiguration config = new CorsConfiguration();
+    config.setAllowCredentials(true);
+    config.addAllowedOrigin("*"); // Use specific domains in production
+    config.addAllowedHeader("*");
+    config.addAllowedMethod("*");
+
+    UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+    source.registerCorsConfiguration("/**", config);
+
+    return new CorsWebFilter(source);
+}
+
+private AVScanFileResponse downloadAVScanFile(String fileReference) {
+    try {
+        Log.info("downloadAVScanFile() Start...");
+        Log.info("downloadAVScanFile() fileReference ---> " + fileReference);
+
+        return WebClient.builder()
+                .build()
+                .method(HttpMethod.GET)
+                .uri(uriBuilder -> uriBuilder.path(uploadUrl).queryParam("fileReference", fileReference).build())
+                .header("x-api-key", "your-api-key-here")
+                .header("Authorization", "Bearer " + getJwtToken(fileReference))
+                .retrieve()
+                .onStatus(
+                        status -> !status.is2xxSuccessful(),
+                        clientResponse -> {
+                            Log.error("Error in AV scan download file API");
+                            return clientResponse
+                                    .bodyToMono(String.class)
+                                    .flatMap(errorBody -> Mono.error(new AsgwyGlobalException("AV scan error: " + errorBody)));
+                        }
+                )
+                .bodyToMono(AVScanFileResponse.class)
+                .toFuture()
+                .get();
+    } catch (InterruptedException | ExecutionException e) {
+        Log.error("Error in AV download API :: {}", e.getLocalizedMessage());
+        throw new AsgwyGlobalException("Error in AV download API :: " + e.getLocalizedMessage(), e);
+    }
+}
