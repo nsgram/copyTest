@@ -1,18 +1,14 @@
-private Mono<AVScanFileResponse> downloadAVScanFile(String fileReference) {
-    log.info("Starting AV Scan File download for fileReference: {}", fileReference);
+JsonNode downloadJson = builder.build().method(HttpMethod.GET)
+					.uri(t -> t.host("https://sit1-api.cvshealth.com/file/scan/download/v1/files").path(fileReference)
+							.build())
+					.headers(t -> t.addAll(headers)).retrieve().onStatus(status -> !status.is2xxSuccessful(),
+							errorResponse -> errorResponse.bodyToMono((JsonNode.class)).flatMap(errorBody -> {
+								log.error("Exception from Plansponsor API " + errorBody);
+								throw new RoutingException("");
+							}))
+					.bodyToMono(JsonNode.class).toFuture().get();
 
-    return builder.build()
-        .method(HttpMethod.GET)
-        .uri(uploadurl, fileReference)
-        .header("x-api-key", apiKey)
-        .header("Authorization", "Bearer " + getJwtToken(fileReference))
-        .retrieve()
-        .bodyToMono(AVScanFileResponse.class)
-        .doOnNext(response -> log.info("Successfully received response: {}", response))
-        .doOnError(error -> log.error("Error during file download: {}", error.getMessage(), error))
-        .retryWhen(Retry.backoff(3, Duration.ofSeconds(2))) // Retry on transient failures
-        .onErrorResume(e -> {
-            log.error("Fallback mechanism triggered: {}", e.getMessage());
-            return Mono.error(new AsgwyGlobalException("Error in AV download API", e));
-        });
-}
+	getting below exception
+
+	Error downloading AVScan file: org.springframework.web.reactive.function.UnsupportedMediaTypeException:
+	 Content type 'text/html;charset=us-ascii' not supported for bodyType=com.fasterxml.jackson.databind.JsonNode"
