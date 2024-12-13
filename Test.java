@@ -1,25 +1,18 @@
-private AVScanFileResponse downloadAVScanFile(String fileReference) {
-    try {
-        log.info("Starting AV Scan File download for fileReference: {}", fileReference);
+private Mono<AVScanFileResponse> downloadAVScanFile(String fileReference) {
+    log.info("Starting AV Scan File download for fileReference: {}", fileReference);
 
-        HttpClient httpClient = HttpClient.create()
-            .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 5000) // Connection timeout
-            .responseTimeout(Duration.ofSeconds(15));          // Response timeout
-
-        WebClient webClient = WebClient.builder()
-            .clientConnector(new ReactorClientHttpConnector(httpClient))
-            .build();
-
-        return webClient.method(HttpMethod.GET)
-            .uri(uploadurl, fileReference)
-            .header("x-api-key", apiKey)
-            .header("Authorization", "Bearer " + getJwtToken(fileReference))
-            .retrieve()
-            .bodyToMono(AVScanFileResponse.class)
-            .retryWhen(Retry.backoff(3, Duration.ofSeconds(2))) // Retry on failure
-            .block();  // Process response directly
-    } catch (Exception e) {
-        log.error("Error downloading AV Scan file: {}", e.getMessage(), e);
-        throw new AsgwyGlobalException("Error in AV download API", e);
-    }
+    return builder.build()
+        .method(HttpMethod.GET)
+        .uri(uploadurl, fileReference)
+        .header("x-api-key", apiKey)
+        .header("Authorization", "Bearer " + getJwtToken(fileReference))
+        .retrieve()
+        .bodyToMono(AVScanFileResponse.class)
+        .doOnNext(response -> log.info("Successfully received response: {}", response))
+        .doOnError(error -> log.error("Error during file download: {}", error.getMessage(), error))
+        .retryWhen(Retry.backoff(3, Duration.ofSeconds(2))) // Retry on transient failures
+        .onErrorResume(e -> {
+            log.error("Fallback mechanism triggered: {}", e.getMessage());
+            return Mono.error(new AsgwyGlobalException("Error in AV download API", e));
+        });
 }
