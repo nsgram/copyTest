@@ -3,9 +3,8 @@ private AVScanFileResponse downloadAVScanFile(String fileReference) {
         log.info("Starting AV Scan File download for fileReference: {}", fileReference);
 
         HttpClient httpClient = HttpClient.create()
-            .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 5000) // 5 seconds
-            .responseTimeout(Duration.ofSeconds(30))           // 30 seconds
-            .option(ChannelOption.SO_KEEPALIVE, true);         // Enable keep-alive
+            .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 5000) // Connection timeout
+            .responseTimeout(Duration.ofSeconds(15));          // Response timeout
 
         WebClient webClient = WebClient.builder()
             .clientConnector(new ReactorClientHttpConnector(httpClient))
@@ -18,7 +17,7 @@ private AVScanFileResponse downloadAVScanFile(String fileReference) {
             .retrieve()
             .bodyToMono(AVScanFileResponse.class)
             .retryWhen(Retry.backoff(3, Duration.ofSeconds(2))) // Retry on failure
-            .block();
+            .block();  // Process response directly
     } catch (Exception e) {
         log.error("Error downloading AV Scan file: {}", e.getMessage(), e);
         throw new AsgwyGlobalException("Error in AV download API", e);
