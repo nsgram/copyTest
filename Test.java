@@ -1,40 +1,64 @@
-public static PrivateKey readPrivateKey() throws IOException, NoSuchAlgorithmException, InvalidKeySpecException {
-		//String filePath = "src/main/resources/encryptionKeys/recipient-np-private-key-asg.pem";
-		//String privateKeyPEM = new String(Files.readAllBytes(Paths.get(filePath)));
-		String privateKeyPEM = new String(pemKey);
+import java.io.IOException;
+import java.security.KeyStore;
+import java.security.PrivateKey;
+import java.security.cert.X509Certificate;
+import java.util.Enumeration;
 
-		if (privateKeyPEM.contains("BEGIN RSA PRIVATE KEY")) {
-			return readPKCS1PrivateKey(pemKey);
-		} else {
-			return readPKCS8PrivateKey(privateKeyPEM);
-		}
-	}
+import lombok.extern.slf4j.Slf4j;
 
+@Slf4j
+public class AzureKeyRetriever {
 
+    /**
+     * Reads the private key from the Azure App Service Key Store (Windows-MY) using the certificate thumbprint.
+     *
+     * @param thumbprint Certificate thumbprint (case-insensitive).
+     * @return The corresponding private key.
+     * @throws RuntimeException If the key retrieval fails.
+     */
+    public static PrivateKey readPrivateKey(String thumbprint) {
+        try {
+            // Load the Windows-MY keystore
+            KeyStore keyStore = KeyStore.getInstance("Windows-MY");
+            keyStore.load(null, null);
 
-private static PrivateKey readPKCS1PrivateKey(String pemKey) throws IOException {
-		try (PEMParser pemParser = new PEMParser(new StringReader(pemKey))) {
-			Object object = pemParser.readObject();
+            // Normalize thumbprint
+            String normalizedThumbprint = thumbprint.replaceAll("\\s+", "").toUpperCase();
 
-			if (object instanceof PEMKeyPair) {
-				JcaPEMKeyConverter converter = new JcaPEMKeyConverter().setProvider("BC");
-				return converter.getPrivateKey(((PEMKeyPair) object).getPrivateKeyInfo());
-			} else if (object instanceof PrivateKeyInfo) {
-				JcaPEMKeyConverter converter = new JcaPEMKeyConverter().setProvider("BC");
-				return converter.getPrivateKey((PrivateKeyInfo) object);
-			} else {
-				throw new IOException("Unsupported key format.");
-			}
-		}
-	}
+            // Search for the certificate by thumbprint
+            Enumeration<String> aliases = keyStore.aliases();
+            while (aliases.hasMoreElements()) {
+                String alias = aliases.nextElement();
+                X509Certificate certificate = (X509Certificate) keyStore.getCertificate(alias);
 
-	private static PrivateKey readPKCS8PrivateKey(String privateKeyPEM)
-			throws NoSuchAlgorithmException, InvalidKeySpecException {
-		privateKeyPEM = privateKeyPEM.replace("-----BEGIN PRIVATE KEY-----", "")
-				.replace("-----END PRIVATE KEY-----", "").replaceAll("\\s+", "");
+                if (certificate != null && normalizedThumbprint.equalsIgnoreCase(getThumbprint(certificate))) {
+                    log.info("Certificate found for thumbprint: {}", thumbprint);
+                    return (PrivateKey) keyStore.getKey(alias, null); // Retrieve private key
+                }
+            }
+            throw new RuntimeException("Certificate with thumbprint " + thumbprint + " not found.");
+        } catch (Exception e) {
+            log.error("Error reading private key from Azure Key Store: {}", e.getMessage(), e);
+            throw new RuntimeException("Error reading private key: " + e.getMessage(), e);
+        }
+    }
 
-		byte[] keyBytes = Base64.getDecoder().decode(privateKeyPEM);
-		PKCS8EncodedKeySpec keySpec = new PKCS8EncodedKeySpec(keyBytes);
-		KeyFactory keyFactory = KeyFactory.getInstance("RSA");
-		return keyFactory.generatePrivate(keySpec);
-	}
+    /**
+     * Computes the thumbprint (SHA-1 hash) of a given certificate.
+     *
+     * @param certificate The X509Certificate object.
+     * @return The computed thumbprint as a String.
+     * @throws Exception If any error occurs while computing the hash.
+     */
+    private static String getThumbprint(X509Certificate certificate) throws Exception {
+        byte[] encoded = certificate.getEncoded();
+        byte[] digest = java.security.MessageDigest.getInstance("SHA-1").digest(encoded);
+
+        // Convert digest to a hexadecimal thumbprint
+        StringBuilder thumbprintBuilder = new StringBuilder();
+        for (byte b : digest) {
+            thumbprintBuilder.append(String.format("%02X", b));
+        }
+        return thumbprintBuilder.toString();
+    }
+}
