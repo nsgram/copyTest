@@ -1,106 +1,51 @@
+<dependency>
+    <groupId>io.projectreactor.netty</groupId>
+    <artifactId>reactor-netty-http</artifactId>
+    <version>1.0.34</version>
+</dependency>
+<dependency>
+    <groupId>io.netty</groupId>
+    <artifactId>netty-tcnative-boringssl-static</artifactId>
+    <version>2.0.59.Final</version>
+</dependency>
+
+
+import io.netty.handler.ssl.SslContext;
+import io.netty.handler.ssl.SslContextBuilder;
+import org.springframework.context.annotation.Bean;
+import org.springframework.stereotype.Component;
+import org.springframework.web.reactive.function.client.WebClient;
+import reactor.netty.http.client.HttpClient;
+import reactor.netty.transport.ssl.SslProvider;
+import reactor.netty.transport.ssl.SslContextSpec;
+
+import java.io.InputStream;
 import java.security.KeyStore;
-import java.security.PrivateKey;
-import java.security.cert.Certificate;
-import java.util.Collections;
-import javax.net.ssl.SSLContext;
-import org.apache.http.impl.client.CloseableHttpClient;
-import org.apache.http.impl.client.HttpClients;
-import org.apache.http.conn.ssl.SSLConnectionSocketFactory;
-import org.apache.http.ssl.SSLContexts;
-import org.apache.http.client.methods.HttpGet;
-import org.apache.http.impl.client.CloseableHttpResponse;
 
-public class SecureDownloadAPI {
+@Component
+public class WebClientConfig {
 
-    public static void main(String[] args) {
-        try {
-            String certAlias = "rg-hcb-asgwy-qa-AVscan-privatecert";
-            String passkey = "asgwydev";
-
-            // Load the keystore
-            KeyStore keyStore = KeyStore.getInstance("Windows-MY");
-            keyStore.load(null, null);
-
-            PrivateKey privateKey = null;
-            Certificate certificate = null;
-
-            for (Enumeration<String> aliases = keyStore.aliases(); aliases.hasMoreElements();) {
-                String alias = aliases.nextElement();
-                if (alias.equalsIgnoreCase(certAlias)) {
-                    privateKey = (PrivateKey) keyStore.getKey(alias, passkey.toCharArray());
-                    certificate = keyStore.getCertificate(alias);
-                    break;
-                }
-            }
-
-            if (privateKey == null || certificate == null) {
-                throw new RuntimeException("Certificate or private key not found for alias: " + certAlias);
-            }
-
-            // Build the SSL Context
-            SSLContext sslContext = SSLContexts.custom()
-                    .loadKeyMaterial(keyStore, passkey.toCharArray())  // Load key material
-                    .build();
-
-            SSLConnectionSocketFactory sslSocketFactory = new SSLConnectionSocketFactory(sslContext);
-
-            // Build HTTP client
-            CloseableHttpClient httpClient = HttpClients.custom()
-                    .setSSLSocketFactory(sslSocketFactory)
-                    .build();
-
-            // Make the API call
-            HttpGet request = new HttpGet("https://example.com/api/v4/avscan/download");
-            try (CloseableHttpResponse response = httpClient.execute(request)) {
-                System.out.println("Response: " + response.getStatusLine());
-            }
-
-        } catch (Exception e) {
-            throw new RuntimeException("Error setting up secure connection: " + e.getMessage(), e);
+    @Bean
+    public WebClient webClient() throws Exception {
+        // Load your keystore
+        KeyStore keyStore = KeyStore.getInstance("JKS");
+        try (InputStream keyStoreStream = this.getClass().getResourceAsStream("/your-keystore.jks")) {
+            keyStore.load(keyStoreStream, "your-keystore-password".toCharArray());
         }
-    }
-}
 
+        // Build SSL context
+        SslContext sslContext = SslContextBuilder.forClient()
+                .keyManager(keyStore, "your-keystore-password".toCharArray())
+                .trustManager(keyStore)
+                .build();
 
+        // Configure HttpClient with SSL
+        HttpClient httpClient = HttpClient.create()
+                .secure(sslContextSpec -> sslContextSpec.sslContext(sslContext));
 
-
-
-import java.security.KeyStore;
-import java.security.PrivateKey;
-import java.security.cert.Certificate;
-import java.util.Enumeration;
-
-public class AzureCertificateLoader {
-
-    public static void main(String[] args) {
-        try {
-            String certAlias = "rg-hcb-asgwy-qa-AVscan-privatecert";
-
-            // Load the Windows-MY keystore
-            KeyStore keyStore = KeyStore.getInstance("Windows-MY");
-            keyStore.load(null, null);
-
-            // Find certificate by alias
-            PrivateKey privateKey = null;
-            Certificate certificate = null;
-
-            for (Enumeration<String> aliases = keyStore.aliases(); aliases.hasMoreElements();) {
-                String alias = aliases.nextElement();
-                if (alias.equalsIgnoreCase(certAlias)) {
-                    privateKey = (PrivateKey) keyStore.getKey(alias, "asgwydev".toCharArray());
-                    certificate = keyStore.getCertificate(alias);
-                    break;
-                }
-            }
-
-            if (privateKey == null || certificate == null) {
-                throw new RuntimeException("Certificate or private key not found for alias: " + certAlias);
-            }
-
-            System.out.println("Successfully loaded certificate: " + certificate.toString());
-
-        } catch (Exception e) {
-            throw new RuntimeException("Error accessing certificate: " + e.getMessage(), e);
-        }
+        // Build WebClient
+        return WebClient.builder()
+                .clientConnector(new ReactorClientHttpConnector(httpClient))
+                .build();
     }
 }
