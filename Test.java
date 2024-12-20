@@ -12,13 +12,10 @@ public Mono<AVScanFileResponse> downloadAVScanFile(String fileReference) {
             })
         )
         .bodyToMono(AVScanFileResponse.class)
-        .retryWhen(
-            ReactorRetry.backoff(3, Duration.ofSeconds(2)) // Retry 3 times with 2 seconds between attempts
-                .filter(throwable -> throwable instanceof WebClientException) // Retry for specific exceptions
-                .onRetryExhaustedThrow((retryBackoffSpec, retrySignal) -> {
-                    log.error("Retry attempts exhausted for fileReference: {}", fileReference);
-                    return new RuntimeException("Retry attempts exhausted");
-                })
+        .retryWhen(errors -> errors
+            .filter(error -> error instanceof WebClientException)  // Retry only on WebClient errors
+            .delayElements(Duration.ofSeconds(2))  // Add delay of 2 seconds between retries
+            .take(3)  // Retry 3 times
         )
         .doOnSuccess(response -> log.info("Successfully retrieved AVScanFileResponse: {}", response))
         .doOnError(error -> log.error("Error during AV scan file retrieval: {}", error.getMessage()));
