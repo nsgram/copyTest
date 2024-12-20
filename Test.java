@@ -1,31 +1,31 @@
- private AVScanFileResponse downloadAVScanFile(String fileReference) {
-		try {
-			log.info("downloadAVScanFile() Start...");
-			log.info("downloadAVScanFile() fileReference--->" + fileReference);
-			return proxyWebClient.method(HttpMethod.GET).uri(uploadUrl, fileReference).header("x-api-key", apiKey)
-					.header("Authorization", "Bearer " + getJwtToken(fileReference)).retrieve()
-					.onStatus(status -> !status.is2xxSuccessful(),
-							clientResponse -> clientResponse.bodyToMono(AVScanFileResponse.class).flatMap(errorBody -> {
-								log.error("Error in  avscan donload file api");
-								throw new AsgwyGlobalException("Error in avscan download file api");
-							}))
-					.bodyToMono(AVScanFileResponse.class).toFuture().get();
-		} catch (InterruptedException e) {
-			log.error("Error in AV download api ::{}", e.getLocalizedMessage());
-			Thread.currentThread().interrupt();
-			throw new AsgwyGlobalException("Error in AV download api ::" + e.getLocalizedMessage());
+public Mono<AVScanFileResponse> downloadAVScanFile(String fileReference) {
+    return proxyWebClient.method(HttpMethod.GET)
+        .uri(uploadUrl, fileReference)
+        .header("x-api-key", apiKey)
+        .header("Authorization", "Bearer " + getJwtToken(fileReference))
+        .retrieve()
+        .onStatus(status -> !status.is2xxSuccessful(),
+                  response -> response.bodyToMono(String.class).flatMap(errorBody -> {
+                      log.error("Error in AV scan download file API: {}", errorBody);
+                      return Mono.error(new AsgwyGlobalException("Error in AV scan download file API: " + errorBody));
+                  }))
+        .bodyToMono(AVScanFileResponse.class)
+        .doOnSuccess(response -> log.info("AVScanFileResponse: {}", response))
+        .doOnError(error -> log.error("Error while downloading AV scan file: ", error));
+}
 
-		} catch (ExecutionException e) {
-			log.error("Error in AV download api ::{}", e.getLocalizedMessage());
-			throw new AsgwyGlobalException("Error in AV download api ::" + e.getLocalizedMessage());
-		}
-	}
-  
-  
-  getting below exception but its work same api call is postman
- 
- org.springframework.web.reactive.function.client.WebClientRequestException: Connection reset
-	at com.aetna.asgwy.webmw.service.AVScanFileServiceV4.downloadAVScanFile(AVScanFileServiceV4.java:181) ~[classes/:na]
-	Suppressed: reactor.core.publisher.FluxOnAssembly$OnAssemblyException: 
-Error has been observed at the following site(s):
-	*__checkpoint ⇢ com.aetna.asgwy.webmw.config.CorsFilterConfiguration$$Lambda/0x0000024431786b10 [DefaultWebFilterChain]
+
+
+WebClient.builder()
+         .baseUrl(baseURL)
+         .clientConnector(new ReactorClientHttpConnector(HttpClient.create()
+             .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 10000)
+             .responseTimeout(Duration.ofSeconds(30))
+             .doOnConnected(conn -> conn.addHandlerLast(new ReadTimeoutHandler(30))
+                                       .addHandlerLast(new WriteTimeoutHandler(30)))))
+         .build();
+
+
+logging:
+  level:
+    org.springframework.web.reactive.function.client: DEBUG
