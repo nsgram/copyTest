@@ -4,28 +4,22 @@ public Mono<AVScanFileResponse> downloadAVScanFile(String fileReference) {
         .header("x-api-key", apiKey)
         .header("Authorization", "Bearer " + getJwtToken(fileReference))
         .retrieve()
-        .onStatus(status -> !status.is2xxSuccessful(),
-                  response -> response.bodyToMono(String.class).flatMap(errorBody -> {
-                      log.error("Error in AV scan download file API: {}", errorBody);
-                      return Mono.error(new AsgwyGlobalException("Error in AV scan download file API: " + errorBody));
-                  }))
+        .onStatus(
+            status -> !status.is2xxSuccessful(),
+            clientResponse -> clientResponse.bodyToMono(String.class).flatMap(errorBody -> {
+                log.error("Error in AV scan download file API: {}", errorBody);
+                return Mono.error(new AsgwyGlobalException("Error in AV scan download file API: " + errorBody));
+            })
+        )
         .bodyToMono(AVScanFileResponse.class)
-        .doOnSuccess(response -> log.info("AVScanFileResponse: {}", response))
-        .doOnError(error -> log.error("Error while downloading AV scan file: ", error));
+        .retryWhen(
+            ReactorRetry.backoff(3, Duration.ofSeconds(2)) // Retry 3 times with 2 seconds between attempts
+                .filter(throwable -> throwable instanceof WebClientException) // Retry for specific exceptions
+                .onRetryExhaustedThrow((retryBackoffSpec, retrySignal) -> {
+                    log.error("Retry attempts exhausted for fileReference: {}", fileReference);
+                    return new RuntimeException("Retry attempts exhausted");
+                })
+        )
+        .doOnSuccess(response -> log.info("Successfully retrieved AVScanFileResponse: {}", response))
+        .doOnError(error -> log.error("Error during AV scan file retrieval: {}", error.getMessage()));
 }
-
-
-
-WebClient.builder()
-         .baseUrl(baseURL)
-         .clientConnector(new ReactorClientHttpConnector(HttpClient.create()
-             .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 10000)
-             .responseTimeout(Duration.ofSeconds(30))
-             .doOnConnected(conn -> conn.addHandlerLast(new ReadTimeoutHandler(30))
-                                       .addHandlerLast(new WriteTimeoutHandler(30)))))
-         .build();
-
-
-logging:
-  level:
-    org.springframework.web.reactive.function.client: DEBUG
