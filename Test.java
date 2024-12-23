@@ -1,31 +1,33 @@
+import org.apache.hc.client5.http.impl.classic.HttpClients;
+import org.apache.hc.core5.ssl.SSLContextBuilder;
+import org.apache.http.impl.client.HttpClient;
+import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
+import org.springframework.web.client.RestTemplate;
 
-// Load the keystore
-			KeyStore keyStore = KeyStore.getInstance("JKS");
-			keyStore.load(new FileInputStream(new File("src/main/resources/malware.qa.jks")), "malware".toCharArray());
+import java.io.FileInputStream;
+import java.security.KeyStore;
 
-			// Create SSL context
-			SSLContext sslContext = SSLContextBuilder.create().loadKeyMaterial(keyStore, "malware".toCharArray())
-					.build();
+public class MyHttpClientConfig {
 
-			// Create HTTP client with SSL context
-			HttpClient httpClient = HttpClientBuilder.create().setSSLContext(sslContext).build();
+    public RestTemplate restTemplate() throws Exception {
+        // Load the keystore
+        KeyStore keyStore = KeyStore.getInstance("JKS");
+        keyStore.load(new FileInputStream("src/main/resources/malware.qa.jks"), "malware".toCharArray());
 
-			// Create request factory
-			HttpComponentsClientHttpRequestFactory requestFactory = new HttpComponentsClientHttpRequestFactory(
-					(org.apache.hc.client5.http.classic.HttpClient) httpClient);
+        // Create SSL context
+        SSLContext sslContext = SSLContextBuilder.create()
+                .loadKeyMaterial(keyStore, "malware".toCharArray())
+                .build();
 
-			// Create RestTemplate
-			RestTemplate restTemplate = new RestTemplate(requestFactory);
-			
-			getting below error
+        // Create HttpClient for HttpClient5
+        org.apache.hc.client5.http.impl.classic.HttpClient httpClient = HttpClients.custom()
+                .setSSLContext(sslContext)
+                .build();
 
-I am using 
-<dependency>
-			<groupId>org.apache.httpcomponents.client5</groupId>
-			<artifactId>httpclient5</artifactId>
-			<version>5.3.1</version>
-		</dependency>
+        // Create request factory with the HttpClient
+        HttpComponentsClientHttpRequestFactory factory = new HttpComponentsClientHttpRequestFactory(httpClient);
 
-java.lang.ClassCastException: class org.apache.http.impl.client.InternalHttpClient cannot
- be cast to class org.apache.hc.client5.http.classic.HttpClient (org.apache.http.impl.client.InternalHttpClient 
- and org.apache.hc.client5.http.classic.HttpClient are in unnamed module of loader 'app')
+        // Create RestTemplate
+        return new RestTemplate(factory);
+    }
+}
