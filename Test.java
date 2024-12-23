@@ -19,7 +19,12 @@
 			
 			getting below error
 
-
+I am using 
+<dependency>
+			<groupId>org.apache.httpcomponents.client5</groupId>
+			<artifactId>httpclient5</artifactId>
+			<version>5.3.1</version>
+		</dependency>
 
 java.lang.ClassCastException: class org.apache.http.impl.client.InternalHttpClient cannot
  be cast to class org.apache.hc.client5.http.classic.HttpClient (org.apache.http.impl.client.InternalHttpClient 
