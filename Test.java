@@ -21,12 +21,14 @@ public RestTemplate restTemplate(RestTemplateBuilder builder) throws Exception {
             .loadKeyMaterial(keyStore("classpath:cert.jks", password), password)
             .loadTrustMaterial(null, new TrustSelfSignedStrategy()).build();
 
-    // Use CloseableHttpClient and cast to HttpClient
+    // Create the HttpClient using the SSLContext
     CloseableHttpClient client = HttpClients.custom().setSSLContext(sslContext).build();
 
-    return builder
-            .requestFactory(new HttpComponentsClientHttpRequestFactory(client))
-            .build();
+    // Use HttpComponentsClientHttpRequestFactory
+    HttpComponentsClientHttpRequestFactory factory = new HttpComponentsClientHttpRequestFactory(client);
+
+    // Return the RestTemplate with the custom request factory
+    return builder.requestFactory(() -> factory).build();
 }
 
 private KeyStore keyStore(String file, char[] password) throws Exception {
