@@ -105,3 +105,29 @@ If you still face issues after these steps:
 
 	1.	Test the generated RestTemplate code from Postman.
 	2.	Share more detailed logs or errors returned by your Spring Boot app.
+
+
+
+
+
+
+public static void main(String[] args) throws Exception {
+    RestTemplateConfig config = new RestTemplateConfig();
+    RestTemplate restTemplate = config.restTemplateWithJks();
+
+    String url = "https://sit1-api.cvshealth.com/file/scan/download/v1/files/1734938744453-Screenshot_test-4df98ee8";
+    HttpHeaders headers = new HttpHeaders();
+    headers.set("x-api-key", "T1gpDfjoNoNPdqqVfGgR1kw3Rnz0oi6w");
+    headers.set("Authorization", "Bearer xK0g");
+    headers.set("Cookie", "_abck=..."); // Add full cookie here
+
+    HttpEntity<String> entity = new HttpEntity<>(headers);
+    ResponseEntity<byte[]> response = restTemplate.exchange(url, HttpMethod.GET, entity, byte[].class);
+
+    if (response.getStatusCode().is2xxSuccessful()) {
+        System.out.println("Request successful!");
+        // Save or process the response body
+    } else {
+        System.out.println("Failed with status: " + response.getStatusCode());
+    }
+}
