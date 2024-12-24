@@ -1,6 +1,5 @@
 import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
 import org.apache.hc.client5.http.impl.classic.HttpClients;
-import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManager;
 import org.apache.hc.client5.http.ssl.SSLConnectionSocketFactory;
 import org.apache.hc.core5.ssl.SSLContextBuilder;
 import org.apache.hc.core5.ssl.TrustStrategy;
@@ -27,20 +26,15 @@ public class RestTemplateJksExample {
         // Create the SSLContext
         SSLContext sslContext = SSLContextBuilder.create()
                 .loadKeyMaterial(keyStore, jksPassword.toCharArray()) // Load client certificates
-                .loadTrustMaterial(keyStore, (TrustStrategy) (chain, authType) -> true) // Trust all for testing
+                .loadTrustMaterial(keyStore, (TrustStrategy) (chain, authType) -> true) // Trust all certificates for testing
                 .build();
 
-        // Create SSLConnectionSocketFactory
+        // Create the SSLConnectionSocketFactory
         SSLConnectionSocketFactory sslSocketFactory = new SSLConnectionSocketFactory(sslContext);
 
-        // Configure the connection manager with the SSL factory
-        PoolingHttpClientConnectionManager connectionManager = new PoolingHttpClientConnectionManager();
-        connectionManager.setDefaultConnectionConfig(sslSocketFactory.getSocketConfig());
-        connectionManager.setDefaultSocketConfig(sslSocketFactory.getSocketConfig());
-
-        // Build the CloseableHttpClient
+        // Build the HttpClient
         CloseableHttpClient httpClient = HttpClients.custom()
-                .setConnectionManager(connectionManager)
+                .setSSLSocketFactory(sslSocketFactory)
                 .build();
 
         // Configure RestTemplate with the HttpClient
@@ -48,7 +42,7 @@ public class RestTemplateJksExample {
         RestTemplate restTemplate = new RestTemplate(requestFactory);
 
         // Test the configuration
-        String url = "https://your-secure-url.com/api/test"; // Replace with your secure URL
+        String url = "https://httpbin.org/get"; // Use a public HTTPS URL for testing
         ResponseEntity<String> response = restTemplate.getForEntity(url, String.class);
 
         // Print the response
