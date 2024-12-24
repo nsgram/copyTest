@@ -1,5 +1,6 @@
 import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
 import org.apache.hc.client5.http.impl.classic.HttpClients;
+import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManager;
 import org.apache.hc.client5.http.ssl.SSLConnectionSocketFactory;
 import org.apache.hc.core5.ssl.SSLContextBuilder;
 import org.apache.hc.core5.ssl.TrustStrategy;
@@ -9,6 +10,7 @@ import org.springframework.web.client.RestTemplate;
 
 import javax.net.ssl.SSLContext;
 import java.io.File;
+import java.io.FileInputStream;
 import java.security.KeyStore;
 
 public class RestTemplateJksExample {
@@ -20,23 +22,28 @@ public class RestTemplateJksExample {
 
         // Load the JKS file
         KeyStore keyStore = KeyStore.getInstance("JKS");
-        keyStore.load(new java.io.FileInputStream(new File(jksFilePath)), jksPassword.toCharArray());
+        keyStore.load(new FileInputStream(new File(jksFilePath)), jksPassword.toCharArray());
 
         // Create the SSLContext
         SSLContext sslContext = SSLContextBuilder.create()
-                .loadKeyMaterial(keyStore, jksPassword.toCharArray())
-                .loadTrustMaterial(keyStore, (TrustStrategy) (chain, authType) -> true) // Trust all certificates (for testing)
+                .loadKeyMaterial(keyStore, jksPassword.toCharArray()) // Load client certificates
+                .loadTrustMaterial(keyStore, (TrustStrategy) (chain, authType) -> true) // Trust all for testing
                 .build();
 
         // Create SSLConnectionSocketFactory
-        SSLConnectionSocketFactory socketFactory = new SSLConnectionSocketFactory(sslContext);
+        SSLConnectionSocketFactory sslSocketFactory = new SSLConnectionSocketFactory(sslContext);
 
-        // Create CloseableHttpClient
+        // Configure the connection manager with the SSL factory
+        PoolingHttpClientConnectionManager connectionManager = new PoolingHttpClientConnectionManager();
+        connectionManager.setDefaultConnectionConfig(sslSocketFactory.getSocketConfig());
+        connectionManager.setDefaultSocketConfig(sslSocketFactory.getSocketConfig());
+
+        // Build the CloseableHttpClient
         CloseableHttpClient httpClient = HttpClients.custom()
-                .setSSLSocketFactory(socketFactory)
+                .setConnectionManager(connectionManager)
                 .build();
 
-        // Configure RestTemplate with HttpClient
+        // Configure RestTemplate with the HttpClient
         HttpComponentsClientHttpRequestFactory requestFactory = new HttpComponentsClientHttpRequestFactory(httpClient);
         RestTemplate restTemplate = new RestTemplate(requestFactory);
 
