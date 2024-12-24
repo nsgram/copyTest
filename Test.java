@@ -1,36 +1,63 @@
-import org.apache.http.impl.client.HttpClients;
-import org.apache.http.impl.client.HttpClient;
-import org.apache.http.conn.ssl.NoopHostnameVerifier;
-import org.apache.http.ssl.SSLContextBuilder;
-import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
+import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
+import org.apache.hc.client5.http.impl.classic.HttpClients;
+import org.apache.hc.core5.ssl.SSLContextBuilder;
+import org.apache.hc.core5.ssl.TrustStrategy;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.client.RestTemplate;
+import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
 
-import java.io.FileInputStream;
-import java.security.KeyStore;
 import javax.net.ssl.SSLContext;
+import java.io.File;
+import java.security.KeyStore;
 
-public class MyHttpClientConfig {
+public class RestTemplateJksExample {
 
-    public RestTemplate restTemplate() throws Exception {
-        // Load the keystore
+    public static void main(String[] args) throws Exception {
+        // Path to your JKS file
+        String jksFilePath = "src/main/resources/keystore.jks";
+        String jksPassword = "password"; // Keystore password
+        
+        // Load the JKS file
         KeyStore keyStore = KeyStore.getInstance("JKS");
-        keyStore.load(new FileInputStream("src/main/resources/malware.qa.jks"), "malware".toCharArray());
+        keyStore.load(new java.io.FileInputStream(new File(jksFilePath)), jksPassword.toCharArray());
 
-        // Create SSL context
+        // Create the SSLContext
         SSLContext sslContext = SSLContextBuilder.create()
-                .loadKeyMaterial(keyStore, "malware".toCharArray()) // Load the private key material (optional)
+                .loadKeyMaterial(keyStore, jksPassword.toCharArray())
+                .loadTrustMaterial(keyStore, (TrustStrategy) (chain, authType) -> true) // Trust all certificates for demo purposes
                 .build();
 
-        // Create HttpClient for HttpClient4
-        HttpClient httpClient = HttpClients.custom()
-                .setSSLContext(sslContext) // Set the SSL context
-                .setSSLHostnameVerifier(NoopHostnameVerifier.INSTANCE) // Optional: to ignore hostname verification (use if needed)
-                .build(); // Build the HttpClient
+        // Create HttpClient with the SSLContext
+        CloseableHttpClient httpClient = HttpClients.custom()
+                .setSSLContext(sslContext)
+                .build();
 
-        // Create request factory with the HttpClient
-        HttpComponentsClientHttpRequestFactory factory = new HttpComponentsClientHttpRequestFactory(httpClient);
+        // Configure RestTemplate with the HttpClient
+        HttpComponentsClientHttpRequestFactory requestFactory = new HttpComponentsClientHttpRequestFactory(httpClient);
+        RestTemplate restTemplate = new RestTemplate(requestFactory);
 
-        // Create RestTemplate
-        return new RestTemplate(factory);
+        // Test the configuration with a request
+        String url = "https://your-secure-url.com/api/test"; // Replace with your HTTPS URL
+        ResponseEntity<String> response = restTemplate.getForEntity(url, String.class);
+
+        // Print the response
+        System.out.println("Response: " + response.getBody());
     }
 }
+
+
+<dependencies>
+    <!-- Spring Web -->
+    <dependency>
+        <groupId>org.springframework</groupId>
+        <artifactId>spring-web</artifactId>
+        <version>6.1.12</version>
+    </dependency>
+
+    <!-- Apache HttpClient 5 -->
+    <dependency>
+        <groupId>org.apache.httpcomponents.client5</groupId>
+        <artifactId>httpclient5</artifactId>
+        <version>5.4</version>
+    </dependency>
+</dependencies>
