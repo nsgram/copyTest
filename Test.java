@@ -15,4 +15,21 @@ verify(quoteDocumentRepository, times(1)).updateDocStatus(anyLong(),anyString(),
 
 
 getting below error
+Invalid use of argument matchers!
+5 matchers expected, 4 recorded:
+-> at com.aetna.asgwy.service.MissingInfoServiceImplTest.testUpdateQuoteAndDocStatus_Success(MissingInfoServiceImplTest.java:224)
+-> at com.aetna.asgwy.service.MissingInfoServiceImplTest.testUpdateQuoteAndDocStatus_Success(MissingInfoServiceImplTest.java:224)
+-> at com.aetna.asgwy.service.MissingInfoServiceImplTest.testUpdateQuoteAndDocStatus_Success(MissingInfoServiceImplTest.java:224)
+-> at com.aetna.asgwy.service.MissingInfoServiceImplTest.testUpdateQuoteAndDocStatus_Success(MissingInfoServiceImplTest.java:224)
 
+This exception may occur if matchers are combined with raw values:
+    //incorrect:
+    someMethod(any(), "raw String");
+When using matchers, all arguments have to be provided by matchers.
+For example:
+    //correct:
+    someMethod(any(), eq("String by matcher"));
+
+For more info see javadoc for Matchers class.
+
+	at com.aetna.asgwy.service.MissingInfoServiceImplTest.testUpdateQuoteAndDocStatus_Success(MissingInfoServiceImplTest.java:224)
