@@ -1,76 +1,100 @@
-Here's how you can modify the previous example to include headers in the request:
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
 
+import com.aetna.asgwy.service.StateLkupService;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 
-```
-import java.io.FileInputStream;
-import java.io.IOException;
-import java.security.KeyManagementException;
-import java.security.KeyStore;
-import java.security.KeyStoreException;
-import java.security.NoSuchAlgorithmException;
-import java.security.cert.CertificateException;
+import java.util.List;
 
-import javax.net.ssl.SSLContext;
-import javax.net.ssl.SSLSocketFactory;
-import javax.net.ssl.TrustManagerFactory;
+@ExtendWith(MockitoExtension.class)
+class StateLkupServiceImplTest {
 
-import okhttp3.OkHttpClient;
-import okhttp3.Request;
-import okhttp3.Response;
+    @Mock
+    private StateLkupRepository stateLkupRepository;
 
-public class WebClientWithJKS {
+    @InjectMocks
+    private StateLkupServiceImpl stateLkupService;
 
-    public static void main(String[] args) throws KeyStoreException, NoSuchAlgorithmException, CertificateException, IOException, KeyManagementException {
-        // Path to your JKS file
-        String jksPath = "/path/to/your/jksfile.jks";
-        // Password for your JKS file
-        String jksPassword = "your_jks_password";
+    private StateLkup mockState1;
+    private StateLkup mockState2;
 
-        // Load the JKS file
-        KeyStore keyStore = KeyStore.getInstance("JKS");
-        keyStore.load(new FileInputStream(jksPath), jksPassword.toCharArray());
+    @BeforeEach
+    void setUp() {
+        // Mock states
+        mockState1 = new StateLkup();
+        mockState1.setStateCd("CA");
+        mockState1.setStateNm("California");
 
-        // Create a TrustManagerFactory
-        TrustManagerFactory trustManagerFactory = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
-        trustManagerFactory.init(keyStore);
+        mockState2 = new StateLkup();
+        mockState2.setStateCd("NY");
+        mockState2.setStateNm("New York");
+    }
 
-        // Create an SSLContext
-        SSLContext sslContext = SSLContext.getInstance("TLS");
-        sslContext.init(null, trustManagerFactory.getTrustManagers(), null);
+    @Test
+    void getAllStates_shouldReturnStateLkupDtos_whenRepositoryHasData() {
+        // Arrange
+        when(stateLkupRepository.findAll()).thenReturn(List.of(mockState1, mockState2));
 
-        // Create an SSLSocketFactory
-        SSLSocketFactory sslSocketFactory = sslContext.getSocketFactory();
+        // Act
+        List<StateLkupDto> result = stateLkupService.getAllStates();
 
-        // Create an OkHttpClient with the SSLSocketFactory
-        OkHttpClient client = new OkHttpClient.Builder()
-                .sslSocketFactory(sslSocketFactory, (X509TrustManager) trustManagerFactory.getTrustManagers()[0])
-                .hostnameVerifier((hostname, session) -> true) // Always verify the host name
-                .build();
+        // Assert
+        assertNotNull(result, "Result should not be null");
+        assertEquals(2, result.size(), "Result size should match repository data size");
 
-        // Create a Request with headers
-        Request request = new Request.Builder()
-                .url("(link unavailable)") // Replace with your HTTPS endpoint
-                .get() // or post(), put(), delete(), etc. depending on the HTTP method
-                .header("Content-Type", "application/json")
-                .header("Authorization", "Bearer your_access_token")
-                .header("Accept", "application/json")
-                .build();
+        assertEquals("CA", result.get(0).getStateCd());
+        assertEquals("California", result.get(0).getStateNm());
 
-        // Execute the Request
-        try (Response response = client.newCall(request).execute()) {
-            System.out.println(response.body().string());
-        } catch (IOException e) {
-            System.err.println("Error calling HTTPS endpoint: " + e.getMessage());
-        }
+        assertEquals("NY", result.get(1).getStateCd());
+        assertEquals("New York", result.get(1).getStateNm());
+
+        verify(stateLkupRepository, times(1)).findAll();
+    }
+
+    @Test
+    void getAllStates_shouldReturnEmptyList_whenRepositoryHasNoData() {
+        // Arrange
+        when(stateLkupRepository.findAll()).thenReturn(List.of());
+
+        // Act
+        List<StateLkupDto> result = stateLkupService.getAllStates();
+
+        // Assert
+        assertNotNull(result, "Result should not be null");
+        assertTrue(result.isEmpty(), "Result list should be empty");
+
+        verify(stateLkupRepository, times(1)).findAll();
+    }
+
+    @Test
+    void getAllStates_shouldHandleNullResultFromRepositoryGracefully() {
+        // Arrange
+        when(stateLkupRepository.findAll()).thenReturn(null);
+
+        // Act
+        List<StateLkupDto> result = stateLkupService.getAllStates();
+
+        // Assert
+        assertNotNull(result, "Result should not be null");
+        assertTrue(result.isEmpty(), "Result list should be empty when repository returns null");
+
+        verify(stateLkupRepository, times(1)).findAll();
+    }
+
+    @Test
+    void getAllStates_shouldThrowException_whenRepositoryThrowsException() {
+        // Arrange
+        when(stateLkupRepository.findAll()).thenThrow(new RuntimeException("Database error"));
+
+        // Act & Assert
+        RuntimeException exception = assertThrows(RuntimeException.class, () -> stateLkupService.getAllStates());
+        assertEquals("Database error", exception.getMessage());
+
+        verify(stateLkupRepository, times(1)).findAll();
     }
 }
-```
-
-In this example, we added three headers to the request:
-
-
-- `Content-Type`: specifies the format of the request body (in this case, JSON).
-- `Authorization`: provides an access token for authentication.
-- `Accept`: specifies the expected format of the response (in this case, JSON).
-
-You can add or modify headers as needed for your specific use case.
