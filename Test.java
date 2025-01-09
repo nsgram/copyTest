@@ -1,100 +1,49 @@
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.Mockito.*;
-
-import com.aetna.asgwy.service.StateLkupService;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InjectMocks;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
-
-import java.util.List;
-
-@ExtendWith(MockitoExtension.class)
-class StateLkupServiceImplTest {
-
-    @Mock
-    private StateLkupRepository stateLkupRepository;
-
-    @InjectMocks
-    private StateLkupServiceImpl stateLkupService;
-
-    private StateLkup mockState1;
-    private StateLkup mockState2;
-
-    @BeforeEach
-    void setUp() {
-        // Mock states
-        mockState1 = new StateLkup();
-        mockState1.setStateCd("CA");
-        mockState1.setStateNm("California");
-
-        mockState2 = new StateLkup();
-        mockState2.setStateCd("NY");
-        mockState2.setStateNm("New York");
-    }
-
-    @Test
-    void getAllStates_shouldReturnStateLkupDtos_whenRepositoryHasData() {
-        // Arrange
-        when(stateLkupRepository.findAll()).thenReturn(List.of(mockState1, mockState2));
-
-        // Act
-        List<StateLkupDto> result = stateLkupService.getAllStates();
-
-        // Assert
-        assertNotNull(result, "Result should not be null");
-        assertEquals(2, result.size(), "Result size should match repository data size");
-
-        assertEquals("CA", result.get(0).getStateCd());
-        assertEquals("California", result.get(0).getStateNm());
-
-        assertEquals("NY", result.get(1).getStateCd());
-        assertEquals("New York", result.get(1).getStateNm());
-
-        verify(stateLkupRepository, times(1)).findAll();
-    }
-
-    @Test
-    void getAllStates_shouldReturnEmptyList_whenRepositoryHasNoData() {
-        // Arrange
-        when(stateLkupRepository.findAll()).thenReturn(List.of());
-
-        // Act
-        List<StateLkupDto> result = stateLkupService.getAllStates();
-
-        // Assert
-        assertNotNull(result, "Result should not be null");
-        assertTrue(result.isEmpty(), "Result list should be empty");
-
-        verify(stateLkupRepository, times(1)).findAll();
-    }
-
-    @Test
-    void getAllStates_shouldHandleNullResultFromRepositoryGracefully() {
-        // Arrange
-        when(stateLkupRepository.findAll()).thenReturn(null);
-
-        // Act
-        List<StateLkupDto> result = stateLkupService.getAllStates();
-
-        // Assert
-        assertNotNull(result, "Result should not be null");
-        assertTrue(result.isEmpty(), "Result list should be empty when repository returns null");
-
-        verify(stateLkupRepository, times(1)).findAll();
-    }
-
-    @Test
-    void getAllStates_shouldThrowException_whenRepositoryThrowsException() {
-        // Arrange
-        when(stateLkupRepository.findAll()).thenThrow(new RuntimeException("Database error"));
-
-        // Act & Assert
-        RuntimeException exception = assertThrows(RuntimeException.class, () -> stateLkupService.getAllStates());
-        assertEquals("Database error", exception.getMessage());
-
-        verify(stateLkupRepository, times(1)).findAll();
-    }
-}
+Agent First Name,
+Agent Last Name,
+Agent NPN,
+Firm Name,
+GA Name,
+Group Name,
+Group EIN,
+Group Zip Code,
+Group State,
+Quote Effective Date,
+Number of eligible employees,
+Does eligible employees include collectively bargained union employees?,
+Number of collectively bargained union employees?,
+Product type,
+Medical Eligible count,
+Enrolled count for participation,
+Total # of Waivers,
+# of Retirees Enrolled for Coverage,
+# of COBRA/St Continuation Enrolled,
+Participation %,
+FTE,
+MLR TAE Lives,
+Requested broker fee,
+SIC Code,
+SIC Name,
+ERISA Indicator,
+Group work location Address Line 1,
+Group work location Address Line 2,
+Group work location City,
+Group work location State,
+Group work location Zip,
+Contract Type (in Months),
+TPA,
+Current carrier product type,
+Are you using Using Aetna  Signature  Administrators®  (ASA),
+Is this request for an effective date that is outside of the renewal date?,
+PEO (yes/no),
+Currently with Aetna Professional Employer Organization (PEO)?,
+Is group currently in a Grandfathered Plan?,
+Is the group Off cycle?,
+Is the group a spinoff?,
+Is the group currently with a MEWA?,
+Current Funding Arrangement,
+Aetna Sales Executive,
+Test Group,
+Concession Request Details,
+Concession Status,
+Concession Amount,
+Concession Reason
