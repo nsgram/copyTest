@@ -1,76 +1,44 @@
 package com.example.controller;
 
 import com.example.dto.GroupDetails;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import javax.servlet.http.HttpServletResponse;
+import java.io.ByteArrayOutputStream;
 import java.io.PrintWriter;
-import java.util.Arrays;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 @RestController
 public class GroupDetailsController {
 
-    @GetMapping("/api/group-details/download")
-    public void downloadGroupDetailsAsCsv(HttpServletResponse response) {
-        response.setContentType("text/csv");
-        response.setHeader("Content-Disposition", "attachment; filename=group_details.csv");
+    @GetMapping("/api/group-details/csv")
+    public ResponseEntity<byte[]> downloadGroupDetailsAsCsv() {
+        try (ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
+             PrintWriter writer = new PrintWriter(byteArrayOutputStream, true, StandardCharsets.UTF_8)) {
 
-        try (PrintWriter writer = response.getWriter()) {
-            // Write CSV header
+            // Write the CSV header
             writer.println(String.join(",",
-                "Agent First Name",
-                "Agent Last Name",
-                "Agent NPN",
-                "Firm Name",
-                "GA Name",
-                "Group Name",
-                "Group EIN",
-                "Group Zip Code",
-                "Group State",
-                "Quote Effective Date",
-                "Number of eligible employees",
-                "Does eligible employees include collectively bargained union employees?",
-                "Number of collectively bargained union employees?",
-                "Product type",
-                "Medical Eligible count",
-                "Enrolled count for participation",
-                "Total # of Waivers",
-                "# of Retirees Enrolled for Coverage",
-                "# of COBRA/St Continuation Enrolled",
-                "Participation %",
-                "FTE",
-                "MLR TAE Lives",
-                "Requested broker fee",
-                "SIC Code",
-                "SIC Name",
-                "ERISA Indicator",
-                "Group work location Address Line 1",
-                "Group work location Address Line 2",
-                "Group work location City",
-                "Group work location State",
-                "Group work location Zip",
-                "Contract Type (in Months)",
-                "TPA",
-                "Current carrier product type",
-                "Are you using Using Aetna Signature Administrators® (ASA)",
-                "Is this request for an effective date that is outside of the renewal date?",
-                "PEO (yes/no)",
-                "Currently with Aetna Professional Employer Organization (PEO)?",
-                "Is group currently in a Grandfathered Plan?",
-                "Is the group Off cycle?",
-                "Is the group a spinoff?",
-                "Is the group currently with a MEWA?",
-                "Current Funding Arrangement",
-                "Aetna Sales Executive",
-                "Test Group"
+                "Agent First Name", "Agent Last Name", "Agent NPN", "Firm Name", "GA Name",
+                "Group Name", "Group EIN", "Group Zip Code", "Group State", "Quote Effective Date",
+                "Number of Eligible Employees", "Union Employees Included?", 
+                "Number of Union Employees", "Product Type", "Medical Eligible Count",
+                "Enrolled Count", "Total Waivers", "Retirees Enrolled", "COBRA Enrolled",
+                "Participation %", "FTE", "MLR TAE Lives", "Broker Fee", "SIC Code", 
+                "SIC Name", "ERISA Indicator", "Work Location Address Line 1",
+                "Work Location Address Line 2", "City", "State", "Zip", "Contract Type (Months)",
+                "TPA", "Carrier Product Type", "Using ASA?", "Outside Renewal Date?", 
+                "PEO", "With Aetna PEO?", "Grandfathered Plan?", "Off Cycle?", "Spinoff?",
+                "With MEWA?", "Funding Arrangement", "Sales Executive", "Test Group"
             ));
 
-            // Dummy data for demonstration
-            List<GroupDetails> groupDetailsList = getDummyData();
+            // Retrieve data
+            List<GroupDetails> groupDetailsList = fetchGroupDetails();
 
-            // Write CSV data
+            // Write data rows
             for (GroupDetails details : groupDetailsList) {
                 writer.println(String.join(",",
                     details.getAgentFirstName(),
@@ -83,97 +51,108 @@ public class GroupDetailsController {
                     details.getGroupZipCode(),
                     details.getGroupState(),
                     details.getQuoteEffectiveDate(),
-                    details.getNumberOfEligibleEmployees().toString(),
-                    details.getDoesEligibleEmployeesIncludeCollectivelyBargainedUnionEmployees().toString(),
-                    details.getNumberOfCollectivelyBargainedUnionEmployees().toString(),
+                    String.valueOf(details.getNumberOfEligibleEmployees()),
+                    String.valueOf(details.getCollectivelyBargainedUnionEmployeesIncluded()),
+                    String.valueOf(details.getNumberOfCollectivelyBargainedUnionEmployees()),
                     details.getProductType(),
-                    details.getMedicalEligibleCount().toString(),
-                    details.getEnrolledCountForParticipation().toString(),
-                    details.getTotalNumberOfWaivers().toString(),
-                    details.getNumberOfRetireesEnrolledForCoverage().toString(),
-                    details.getNumberOfCobraContinuationEnrolled().toString(),
-                    details.getParticipationPercentage().toString(),
-                    details.getFte().toString(),
-                    details.getMlrTaeLives().toString(),
-                    details.getRequestedBrokerFee().toString(),
+                    String.valueOf(details.getMedicalEligibleCount()),
+                    String.valueOf(details.getEnrolledCountForParticipation()),
+                    String.valueOf(details.getTotalNumberOfWaivers()),
+                    String.valueOf(details.getNumberOfRetireesEnrolled()),
+                    String.valueOf(details.getNumberOfCOBRAEnrolled()),
+                    String.valueOf(details.getParticipationPercentage()),
+                    String.valueOf(details.getFte()),
+                    String.valueOf(details.getMlrTaeLives()),
+                    String.valueOf(details.getRequestedBrokerFee()),
                     details.getSicCode(),
                     details.getSicName(),
-                    details.getErisaIndicator().toString(),
+                    String.valueOf(details.getErisaIndicator()),
                     details.getGroupWorkLocationAddressLine1(),
                     details.getGroupWorkLocationAddressLine2(),
                     details.getGroupWorkLocationCity(),
                     details.getGroupWorkLocationState(),
                     details.getGroupWorkLocationZip(),
-                    details.getContractTypeInMonths().toString(),
+                    String.valueOf(details.getContractTypeInMonths()),
                     details.getTpa(),
                     details.getCurrentCarrierProductType(),
-                    details.getUsingAetnaSignatureAdministrators().toString(),
-                    details.getIsOutsideRenewalDate().toString(),
+                    String.valueOf(details.getUsingAetnaSignatureAdministrators()),
+                    String.valueOf(details.getRequestOutsideRenewalDate()),
                     details.getPeo(),
-                    details.getCurrentlyWithAetnaProfessionalEmployerOrganization().toString(),
-                    details.getIsGrandfatheredPlan().toString(),
-                    details.getIsOffCycle().toString(),
-                    details.getIsSpinoff().toString(),
-                    details.getIsCurrentlyWithMewa().toString(),
+                    String.valueOf(details.getCurrentlyWithAetnaPEO()),
+                    String.valueOf(details.getGrandfatheredPlan()),
+                    String.valueOf(details.getOffCycle()),
+                    String.valueOf(details.getSpinoff()),
+                    String.valueOf(details.getCurrentlyWithMEWA()),
                     details.getCurrentFundingArrangement(),
                     details.getAetnaSalesExecutive(),
-                    details.getTestGroup().toString()
+                    String.valueOf(details.getTestGroup())
                 ));
             }
+
+            // Create headers
+            HttpHeaders headers = new HttpHeaders();
+            headers.add(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=group_details.csv");
+            headers.add(HttpHeaders.CONTENT_TYPE, "text/csv; charset=UTF-8");
+
+            // Return as ResponseEntity
+            return ResponseEntity.status(HttpStatus.OK)
+                    .headers(headers)
+                    .body(byteArrayOutputStream.toByteArray());
+
         } catch (Exception e) {
-            e.printStackTrace();
+            throw new RuntimeException("Error generating CSV file", e);
         }
     }
 
-    // Dummy data
-    private List<GroupDetails> getDummyData() {
-        GroupDetails groupDetails = new GroupDetails();
-        groupDetails.setAgentFirstName("John");
-        groupDetails.setAgentLastName("Doe");
-        groupDetails.setAgentNPN("12345");
-        groupDetails.setFirmName("Test Firm");
-        groupDetails.setGaName("GA Name");
-        groupDetails.setGroupName("Group A");
-        groupDetails.setGroupEIN("EIN12345");
-        groupDetails.setGroupZipCode("12345");
-        groupDetails.setGroupState("NY");
-        groupDetails.setQuoteEffectiveDate("2023-12-31");
-        groupDetails.setNumberOfEligibleEmployees(10);
-        groupDetails.setDoesEligibleEmployeesIncludeCollectivelyBargainedUnionEmployees(true);
-        groupDetails.setNumberOfCollectivelyBargainedUnionEmployees(2);
-        groupDetails.setProductType("Type A");
-        groupDetails.setMedicalEligibleCount(8);
-        groupDetails.setEnrolledCountForParticipation(6);
-        groupDetails.setTotalNumberOfWaivers(2);
-        groupDetails.setNumberOfRetireesEnrolledForCoverage(1);
-        groupDetails.setNumberOfCobraContinuationEnrolled(1);
-        groupDetails.setParticipationPercentage(75.0);
-        groupDetails.setFte(10);
-        groupDetails.setMlrTaeLives(10);
-        groupDetails.setRequestedBrokerFee(500.0);
-        groupDetails.setSicCode("1234");
-        groupDetails.setSicName("Tech");
-        groupDetails.setErisaIndicator(true);
-        groupDetails.setGroupWorkLocationAddressLine1("Address Line 1");
-        groupDetails.setGroupWorkLocationAddressLine2("Address Line 2");
-        groupDetails.setGroupWorkLocationCity("New York");
-        groupDetails.setGroupWorkLocationState("NY");
-        groupDetails.setGroupWorkLocationZip("12345");
-        groupDetails.setContractTypeInMonths(12);
-        groupDetails.setTpa("TPA Name");
-        groupDetails.setCurrentCarrierProductType("Type B");
-        groupDetails.setUsingAetnaSignatureAdministrators(true);
-        groupDetails.setIsOutsideRenewalDate(false);
-        groupDetails.setPeo("Yes");
-        groupDetails.setCurrentlyWithAetnaProfessionalEmployerOrganization(true);
-        groupDetails.setIsGrandfatheredPlan(false);
-        groupDetails.setIsOffCycle(false);
-        groupDetails.setIsSpinoff(false);
-        groupDetails.setIsCurrentlyWithMewa(false);
-        groupDetails.setCurrentFundingArrangement("Funding Arrangement");
-        groupDetails.setAetnaSalesExecutive("Executive Name");
-        groupDetails.setTestGroup(true);
+    private List<GroupDetails> fetchGroupDetails() {
+        // Simulate fetching data. Replace this with actual service/database call.
+        GroupDetails dummy = new GroupDetails();
+        dummy.setAgentFirstName("John");
+        dummy.setAgentLastName("Doe");
+        dummy.setAgentNPN("12345");
+        dummy.setFirmName("ABC Firm");
+        dummy.setGaName("XYZ GA");
+        dummy.setGroupName("Group A");
+        dummy.setGroupEIN("123456789");
+        dummy.setGroupZipCode("12345");
+        dummy.setGroupState("NY");
+        dummy.setQuoteEffectiveDate("2024-01-01");
+        dummy.setNumberOfEligibleEmployees(50);
+        dummy.setCollectivelyBargainedUnionEmployeesIncluded(true);
+        dummy.setNumberOfCollectivelyBargainedUnionEmployees(10);
+        dummy.setProductType("Product A");
+        dummy.setMedicalEligibleCount(40);
+        dummy.setEnrolledCountForParticipation(35);
+        dummy.setTotalNumberOfWaivers(5);
+        dummy.setNumberOfRetireesEnrolled(3);
+        dummy.setNumberOfCOBRAEnrolled(2);
+        dummy.setParticipationPercentage(87.5);
+        dummy.setFte(45);
+        dummy.setMlrTaeLives(50);
+        dummy.setRequestedBrokerFee(1200.50);
+        dummy.setSicCode("5678");
+        dummy.setSicName("IT Industry");
+        dummy.setErisaIndicator(true);
+        dummy.setGroupWorkLocationAddressLine1("123 Main St");
+        dummy.setGroupWorkLocationAddressLine2("Suite 456");
+        dummy.setGroupWorkLocationCity("New York");
+        dummy.setGroupWorkLocationState("NY");
+        dummy.setGroupWorkLocationZip("12345");
+        dummy.setContractTypeInMonths(12);
+        dummy.setTpa("TPA XYZ");
+        dummy.setCurrentCarrierProductType("Carrier A");
+        dummy.setUsingAetnaSignatureAdministrators(true);
+        dummy.setRequestOutsideRenewalDate(false);
+        dummy.setPeo("Yes");
+        dummy.setCurrentlyWithAetnaPEO(false);
+        dummy.setGrandfatheredPlan(false);
+        dummy.setOffCycle(false);
+        dummy.setSpinoff(false);
+        dummy.setCurrentlyWithMEWA(false);
+        dummy.setCurrentFundingArrangement("Arrangement A");
+        dummy.setAetnaSalesExecutive("Jane Doe");
+        dummy.setTestGroup(true);
 
-        return Arrays.asList(groupDetails);
+        return List.of(dummy);
     }
 }
