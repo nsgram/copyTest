@@ -1,2 +1,7 @@
-SELECT DISTINCT(status_desc)  from asgwy_db_schema.status_lkup WHERE status_typ_cd ='QUOTE_STATUS' ORDER BY status_desc;
+import org.springframework.data.jpa.repository.JpaRepository;
+import java.util.List;
 
+public interface StatusLookupRepository extends JpaRepository<StatusLookup, Long> {
+
+    List<String> findDistinctByOrderByStatusDesc();
+}
