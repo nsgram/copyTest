@@ -1,7 +1,7 @@
-import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.repository.CrudRepository;
 import java.util.List;
 
-public interface StatusLookupRepository extends JpaRepository<StatusLookup, Long> {
-
-    List<String> findDistinctByOrderByStatusDesc();
+public interface StatusLookupRepository extends CrudRepository<StatusLookup, Long> {
+    // Derived query for your specific use case
+    List<String> findDistinctByStatusTypeCodeOrderByStatusDesc(String statusTypeCode);
 }
