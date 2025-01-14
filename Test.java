@@ -1,91 +1,64 @@
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+create VIEW asgwy_db_schema.QUOTES_REPORT_VIEW AS 
 
-import java.io.ByteArrayOutputStream;
-import java.io.OutputStreamWriter;
-import java.io.PrintWriter;
-import java.math.BigInteger;
-import java.nio.charset.StandardCharsets;
-import java.util.Arrays;
-import java.util.List;
-import java.util.stream.Collectors;
+select grp.group_id,
+	   grp.group_nm,
+       grp.employer_id_nbr,
+       grp.test_group_ind,
+       qut.group_zip_cd,
+       st.state_nm,
+       qut.effective_dt,
+       qut.eligible_entrd_cnt,
+       qut.union_emp_ind,
+       qut.union_emp_cnt,
+       qc.concess_req_quote_id,
+       qc.concess_req_status_cd,
+       qc.concess_req_pct,
+       qc.concess_req_reason_txt,
+       qcvr.group_loc_addr_line1_txt,
+       qcvr.group_loc_addr_line2_txt,
+       qcvr.group_loc_city_nm,
+       qcvr.curr_carrier_typ_desc,
+       qcvr.curr_med_carrier_nm,
+       qcvr.grp_mewa_ind,
+       qcvr.aetna_peo_ind,
+       qcvr.contract_period_mo_nbr,
+       qcvr.tot_avg_emp_cnt,
+       qcvr.sic_cd,
+       qcvr.sic_nm,
+       qcvr.def_broker_fee_amt,
+       qcvr.participation_cnt,
+       qcvr.eligible_dervd_cnt,
+       qcvr.waiver_cnt,
+       qcvr.eligible_ret_cnt,
+       qcvr.cobra_emp_cnt,
+       qcvr.participation_pct,
+       qcvr.ft_eqvlnt_cnt,
+       qcvr.erisa_cd,
+       qcvr.curr_tpa_nm,
+       qcvr.aetna_sales_exe,
+       qut.quote_status_cd,
+       qut.submission_dt,
+       st_lkup.status_desc,
+	   st.state_cd
+from asgwy_db_schema.groups Grp
+join asgwy_db_schema.quote qut on grp.group_id=qut.group_id
+join asgwy_db_schema.quote_concession QC on grp.group_id= qc.concess_group_id
+join asgwy_db_schema.quote_coverage qcvr on qut.quote_id= qcvr.quote_id
+join asgwy_db_schema.state_lkup st on st.state_cd = qut.group_state_cd
+join asgwy_db_schema.status_lkup st_lkup on st_lkup.status_cd = qut.quote_status_cd;
+	
+	
+I have above view
 
-@RestController
-@RequestMapping("/api/csv")
-public class CsvController {
+write a view in post gress db where clause should be 
 
-    @GetMapping("/export")
-    public ResponseEntity<byte[]> exportCsv() {
-        // Mock data
-        List<QuoteReport> quoteReports = getQuoteReports();
+effective_dt is not null then add in add in condition
+quote_status_cd is not null then add in add in condition
+effective_dt is not null then add in add in condition
+effective_dt is not null then add in add in condition
 
-        // Generate CSV as a byte array
-        byte[] csvBytes = generateCsv(quoteReports);
 
-        // Prepare response with appropriate headers
-        HttpHeaders headers = new HttpHeaders();
-        headers.add(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=quote_reports.csv");
-        headers.add(HttpHeaders.CONTENT_TYPE, "text/csv");
-        headers.add(HttpHeaders.CONTENT_ENCODING, "UTF-8");
+if only one condition is not null then add it into where clause
+add all above condition dynamically 
 
-        return new ResponseEntity<>(csvBytes, headers, HttpStatus.OK);
-    }
-
-    private List<QuoteReport> getQuoteReports() {
-        // Example data
-        return Arrays.asList(
-                new QuoteReport(new BigInteger("1001"), "Alice", "Description with, comma."),
-                new QuoteReport(new BigInteger("1002"), "Bob", "Text with \"quote\"."),
-                new QuoteReport(null, "Charlie", "Multiline\ntext example")
-        );
-    }
-
-    private byte[] generateCsv(List<QuoteReport> quoteReports) {
-        try (ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
-             PrintWriter csvWriter = new PrintWriter(new OutputStreamWriter(byteArrayOutputStream, StandardCharsets.UTF_8))) {
-
-            // Write CSV header
-            csvWriter.println("Agent ID,Agent Name,Agent NPN");
-
-            // Write each row with proper escaping
-            quoteReports.stream()
-                    .map(this::convertToCsvRow)
-                    .forEach(csvWriter::println);
-
-            csvWriter.flush();
-            return byteArrayOutputStream.toByteArray();
-        } catch (Exception e) {
-            throw new RuntimeException("Error generating CSV", e);
-        }
-    }
-
-    private String convertToCsvRow(QuoteReport report) {
-        return Arrays.asList(
-                getStringValue(report.getAgentId()),
-                getStringValue(report.getAgentName()),
-                getStringValue(report.getAgentNpn())
-        ).stream()
-         .map(this::escapeCsvField)
-         .collect(Collectors.joining(","));
-    }
-
-    private String getStringValue(Object obj) {
-        // Handle null values
-        return obj != null ? obj.toString() : "";
-    }
-
-    private String escapeCsvField(String field) {
-        if (field == null) {
-            return ""; // Null field converted to empty string
-        }
-        if (field.contains(",") || field.contains("\"") || field.contains("\n")) {
-            // Wrap in quotes and escape existing quotes
-            return "\"" + field.replace("\"", "\"\"") + "\"";
-        }
-        return field; // Return as is if no escaping is needed
-    }
-}
+I am using this view into spring boot rest api with JPA
