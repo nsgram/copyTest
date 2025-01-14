@@ -53,9 +53,16 @@ I have above view
 write a view in post gress db where clause should be 
 
 effective_dt is not null then add in add in condition
-quote_status_cd is not null then add in add in condition
-effective_dt is not null then add in add in condition
-effective_dt is not null then add in add in condition
+status_desc is not null then add in add in condition
+state_cd is not null then add in add in condition
+submission_dt is not null then add in add in condition
+
+
+SELECT * from asgwy_db_schema.QUOTES_REPORT_VIEW 
+WHERE effective_dt BETWEEN '2025-01-01' AND '2025-01-01'
+and status_desc = 'Not Submitted'
+and state_cd ='TX'
+and submission_dt BETWEEN '2024-11-11' AND '2024-11-11';
 
 
 if only one condition is not null then add it into where clause
