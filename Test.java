@@ -1,253 +1,141 @@
-Optimized ReportsServiceImpl Class
-
-Here’s the optimized version of your class with potential SonarQube fixes, improved security, and no code smells:
-
-package com.aetna.asgwy.service;
-
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.io.PrintWriter;
-import java.nio.charset.StandardCharsets;
-import java.sql.Timestamp;
-import java.time.LocalDateTime;
-import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
-import java.util.Arrays;
-import java.util.List;
-import java.util.stream.Collectors;
-
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
-import org.springframework.stereotype.Service;
-
-import com.aetna.asgwy.constants.AsgwyConstants;
-import com.aetna.asgwy.dto.QuotesReport;
-import com.aetna.asgwy.enums.ReportsEnum;
-import com.aetna.asgwy.exception.AsgwyGlobalException;
-import com.aetna.asgwy.repository.AsgwyLkupRepository;
-import com.aetna.asgwy.repository.QuotesReportRepository;
-import com.aetna.asgwy.repository.ScheduleReportsRepository;
-import com.aetna.asgwy.repository.entity.ScheduleReports;
-import com.aetna.asgwy.request.ReportsRequest;
-import com.aetna.asgwy.specification.QuotesReportSpecification;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
-
-import lombok.extern.slf4j.Slf4j;
-
 @Slf4j
 @Service
 public class ReportsServiceImpl implements ReportsService {
 
-    private final QuotesReportRepository quotesReportRepository;
-    private final AsgwyLkupRepository asgwyLkupRepository;
-    private final ScheduleReportsRepository scheduleReportsRepository;
-    private final AzureFileService azureFileService;
+	private final QuotesReportRepository quotesReportRepository;
+	private final AsgwyLkupRepository asgwyLkupRepository;
+	private final ScheduleReportsRepository scheduleReportsRepository;
+	private final AzureFileService azureFileService;
 
-    @Autowired
-    public ReportsServiceImpl(QuotesReportRepository quotesReportRepository, 
-                              AsgwyLkupRepository asgwyLkupRepository,
-                              ScheduleReportsRepository scheduleReportsRepository, 
-                              AzureFileService azureFileService) {
-        this.quotesReportRepository = quotesReportRepository;
-        this.asgwyLkupRepository = asgwyLkupRepository;
-        this.scheduleReportsRepository = scheduleReportsRepository;
-        this.azureFileService = azureFileService;
-    }
+	@Autowired
+	public ReportsServiceImpl(QuotesReportRepository quotesReportRepository, AsgwyLkupRepository asgwyLkupRepository,
+			ScheduleReportsRepository scheduleReportsRepository, AzureFileService azureFileService) {
+		this.quotesReportRepository = quotesReportRepository;
+		this.asgwyLkupRepository = asgwyLkupRepository;
+		this.scheduleReportsRepository = scheduleReportsRepository;
+		this.azureFileService = azureFileService;
+	}
 
-    @Override
-    public ResponseEntity<byte[]> downloadOrScheduleQuotesReport(String userId, ReportsRequest reportsRequest) {
-        log.info("downloadOrScheduleQuotesReport() start...");
-        int threshold = getThreshold(ReportsEnum.QUOTE_REPORT.name());
-        List<QuotesReport> quotesReportList = quotesReportRepository
-                .findAll(QuotesReportSpecification.buildDynamicQuery(reportsRequest));
+	@Override
+	public ResponseEntity<byte[]> downloadOrScheduleQuotesReport(String userId, ReportsRequest reportsRequest) {
+		log.info("downloadOrScheduleQuotesReport() start...");
+		int threshold = getThreshold(ReportsEnum.QUOTE_REPORT.name());
+		List<QuotesReport> quotesReportList = quotesReportRepository
+				.findAll(QuotesReportSpecification.buildDynamicQuery(reportsRequest));
 
-        if (quotesReportList.isEmpty()) {
-            log.info("No Data found to generate Report");
-            throw new AsgwyGlobalException(HttpStatus.NO_CONTENT.value(), "No Data found");
-        }
+		if (quotesReportList.isEmpty()) {
+			log.info("No Data found to generate Report");
+			throw new AsgwyGlobalException(HttpStatus.NO_CONTENT.value(), "No Data found");
+		}
 
-        if (quotesReportList.size() <= threshold) {
-            return generateCsvResponse(quotesReportList);
-        } else {
-            return scheduleReport(userId, reportsRequest);
-        }
-    }
+		if (quotesReportList.size() <= threshold) {
+			return generateCsvResponse(quotesReportList, reportsRequest.getStateCd());
+		} else {
+			return scheduleReport(userId, reportsRequest);
+		}
+	}
 
-    private int getThreshold(String reportType) {
-        try {
-            return Integer.parseInt(asgwyLkupRepository.findValueByLabel(reportType));
-        } catch (NumberFormatException e) {
-            log.error("Invalid threshold value for report type {}", reportType, e);
-            throw new AsgwyGlobalException(HttpStatus.INTERNAL_SERVER_ERROR.value(), "Invalid threshold value");
-        }
-    }
+	@Override
+	public ResponseEntity<byte[]> downloadReportByName(String reportFileName) {
+		try {
+			byte[] reportData = azureFileService.downloadReportByName(reportFileName);
+			return ResponseEntity.ok().header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=" + reportFileName)
+					.contentType(MediaType.APPLICATION_OCTET_STREAM).contentLength(reportData.length).body(reportData);
 
-    private ResponseEntity<byte[]> generateCsvResponse(List<QuotesReport> quotesReportList) {
-        log.info("Generating CSV file...");
-        try (ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
-             PrintWriter csvWriter = new PrintWriter(byteArrayOutputStream, true, StandardCharsets.UTF_8)) {
+		} catch (IOException e) {
+			log.error("Error downloading file {}", reportFileName, e);
+			throw new AsgwyGlobalException(HttpStatus.INTERNAL_SERVER_ERROR.value(), "Failed to download file");
+		}
+	}
 
-            String filename = "Quotes_Report_" + LocalDateTime.now().format(DateTimeFormatter.ofPattern("ddMMyyyyHHmmss")) + ".csv";
-            csvWriter.println(AsgwyConstants.QuotesReportHeader());
-            quotesReportList.stream().map(this::convertToCsvRow).forEach(csvWriter::println);
+	private int getThreshold(String reportType) {
+		try {
+			return Integer.parseInt(asgwyLkupRepository.findValueByLabel(reportType));
+		} catch (NumberFormatException e) {
+			log.error("Invalid threshold value for report type {}", reportType, e);
+			throw new AsgwyGlobalException(HttpStatus.INTERNAL_SERVER_ERROR.value(), "Invalid threshold value");
+		}
+	}
 
-            byte[] csvBytes = byteArrayOutputStream.toByteArray();
-            HttpHeaders headers = createCsvHeaders(filename, csvBytes.length);
-            return ResponseEntity.status(HttpStatus.CREATED).headers(headers).body(csvBytes);
+	private ResponseEntity<byte[]> generateCsvResponse(List<QuotesReport> quotesReportList, String stateCd) {
+		log.info("Generating CSV file...");
+		try (ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
+				PrintWriter csvWriter = new PrintWriter(byteArrayOutputStream, true, StandardCharsets.UTF_8)) {
+			String stateCode = stateCd != null && StringUtils.isNotBlank(stateCd) ? stateCd + "_" : "";
 
-        } catch (IOException e) {
-            log.error("Error generating CSV file", e);
-            throw new AsgwyGlobalException(HttpStatus.INTERNAL_SERVER_ERROR.value(), "Error generating CSV file");
-        }
-    }
+			String filename = "Quotes_Report_" + stateCode + new Random().nextInt(99) + 1 + "_"
+					+ LocalDateTime.now().format(DateTimeFormatter.ofPattern("YYYYMMDD")) + ".csv";
+			csvWriter.println(AsgwyConstants.QuotesReportHeader());
+			quotesReportList.stream().map(this::convertToCsvRow).forEach(csvWriter::println);
 
-    private HttpHeaders createCsvHeaders(String filename, int fileLength) {
-        HttpHeaders headers = new HttpHeaders();
-        headers.add(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=" + filename);
-        headers.add(HttpHeaders.CONTENT_TYPE, "text/csv; charset=UTF-8");
-        headers.add(HttpHeaders.CONTENT_LENGTH, String.valueOf(fileLength));
-        return headers;
-    }
+			byte[] csvBytes = byteArrayOutputStream.toByteArray();
+			HttpHeaders headers = createCsvHeaders(filename, csvBytes.length);
+			return ResponseEntity.status(HttpStatus.CREATED).headers(headers).body(csvBytes);
 
-    private ResponseEntity<byte[]> scheduleReport(String userId, ReportsRequest reportsRequest) {
-        log.info("Scheduling report...");
-        try {
-            ObjectMapper mapper = new ObjectMapper();
-            String jsonRequest = mapper.writeValueAsString(reportsRequest);
+		} catch (IOException e) {
+			log.error("Error generating CSV file", e);
+			throw new AsgwyGlobalException(HttpStatus.INTERNAL_SERVER_ERROR.value(), "Error generating CSV file");
+		}
+	}
 
-            Timestamp currentTime = Timestamp.valueOf(LocalDateTime.now(ZoneId.of("America/New_York")));
-            ScheduleReports report = new ScheduleReports();
-            report.setReportType(ReportsEnum.QUOTE_REPORT.name());
-            report.setRequestDetails(jsonRequest);
-            report.setReportStatus(ReportsEnum.INPROGRESS.getValue());
-            report.setRequestedId(userId);
-            report.setRequestedDts(currentTime);
-            report.setUpdateUsrId(userId);
-            report.setUpdateDts(currentTime);
+	private HttpHeaders createCsvHeaders(String filename, int fileLength) {
+		HttpHeaders headers = new HttpHeaders();
+		headers.add(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=" + filename);
+		headers.add(HttpHeaders.CONTENT_TYPE, "text/csv; charset=UTF-8");
+		headers.add(HttpHeaders.CONTENT_LENGTH, String.valueOf(fileLength));
+		return headers;
+	}
 
-            scheduleReportsRepository.save(report);
-            return ResponseEntity.ok("Report Scheduled Successfully".getBytes(StandardCharsets.UTF_8));
+	private ResponseEntity<byte[]> scheduleReport(String userId, ReportsRequest reportsRequest) {
+		log.info("Scheduling report...");
+		try {
+			ObjectMapper mapper = new ObjectMapper();
+			String jsonRequest = mapper.writeValueAsString(reportsRequest);
 
-        } catch (JsonProcessingException e) {
-            log.error("Error processing JSON request", e);
-            throw new AsgwyGlobalException(HttpStatus.INTERNAL_SERVER_ERROR.value(), "Error scheduling report");
-        }
-    }
+			Timestamp currentTime = Timestamp.valueOf(LocalDateTime.now(ZoneId.of("America/New_York")));
+			ScheduleReports report = ScheduleReports.builder().reportType(ReportsEnum.QUOTE_REPORT.name())
+					.requestDetails(jsonRequest).reportStatus(ReportsEnum.INPROGRESS.getValue()).requestedId(userId)
+					.requestedDts(currentTime).updateUsrId(userId).updateDts(currentTime).build();
 
-    private String convertToCsvRow(QuotesReport report) {
-        return Arrays.stream(new String[]{
-                safeString(report.getAgentFirstName()), safeString(report.getAgentLastName()),
-                // Add all fields here...
-                safeString(report.getConcessReqReasonTxt())
-        }).map(this::escapeCsvField).collect(Collectors.joining(","));
-    }
+			scheduleReportsRepository.save(report);
+			log.info("Report scheduled....");
+			throw new AsgwyGlobalException(HttpStatus.OK.value(), "Report Got Scheduled");
+		} catch (JsonProcessingException e) {
+			log.error("Error processing JSON request", e);
+			throw new AsgwyGlobalException(HttpStatus.INTERNAL_SERVER_ERROR.value(), "Error scheduling report");
+		}
+	}
 
-    private String safeString(Object obj) {
-        return obj != null ? obj.toString() : "";
-    }
+	private String convertToCsvRow(QuotesReport report) {
+		return Arrays.stream(new String[] { report.getAgentFirstName(), report.getAgentLastName(), report.getAgentNPN(),
+				report.getFirmName(), report.getGaName(), report.getGroupNm(), report.getEmployerIdNbr(),
+				report.getGroupZipCd(), report.getStateNm(), report.getGroupLocAddrLine1Txt(),
+				report.getGroupLocAddrLine2Txt(), report.getGroupLocCityNm(), report.getCurrCarrierTypDesc(),
+				report.getCurrMedCarrierNm(), report.getGrpMewaAssoc(), report.getAetnaPeoInd(),
+				safeString(report.getEffectiveDt()), safeString(report.getContractPeriodMoNbr()),
+				safeString(report.getEligibleEntrdCnt()), safeString(report.getTotAvgEmpCnt()), report.getSicCd(),
+				report.getSicNm(), safeString(report.getDefBrokerFeeAmt()), report.getUnionEmpInd(),
+				safeString(report.getUnionEmpCnt()), report.getProductCd(), safeString(report.getParticipationCnt()),
+				safeString(report.getEligibleDervdCnt()), safeString(report.getWaiverCnt()),
+				safeString(report.getEligibleRetCnt()), safeString(report.getCobraEmpCnt()),
+				safeString(report.getParticipationPct()), safeString(report.getFtEqvlntCnt()), report.getErisaCd(),
+				report.getCurrTpaNm(), report.getAetnaSalesExe(), safeString(report.getTestGroupInd()),
+				safeString(report.getConcessReqQuoteId()), report.getConcessReqStatusCd(),
+				safeString(report.getConcessReqPct()), report.getConcessReqReasonTxt() }).map(this::escapeCsvField)
+				.collect(Collectors.joining(","));
+	}
 
-    private String escapeCsvField(String field) {
-        if (field == null) return "";
-        if (field.contains(",") || field.contains("\"") || field.contains("\n")) {
-            return "\"" + field.replace("\"", "\"\"") + "\"";
-        }
-        return field;
-    }
+	private String safeString(Object obj) {
+		return obj != null ? obj.toString() : "";
+	}
 
-    @Override
-    public ResponseEntity<byte[]> downloadReportByName(String reportName) {
-        try {
-            byte[] reportData = azureFileService.downloadReportByName(reportName);
-            return ResponseEntity.ok()
-                    .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=" + reportName)
-                    .contentType(MediaType.APPLICATION_OCTET_STREAM)
-                    .contentLength(reportData.length)
-                    .body(reportData);
+	private String escapeCsvField(String field) {
+		if (field == null)
+			return "";
+		if (field.contains(",") || field.contains("\"") || field.contains("\n")) {
+			return "\"" + field.replace("\"", "\"\"") + "\"";
+		}
+		return field;
+	}
 
-        } catch (IOException e) {
-            log.error("Error downloading file {}", reportName, e);
-            throw new AsgwyGlobalException(HttpStatus.INTERNAL_SERVER_ERROR.value(), "Failed to download file");
-        }
-    }
 }
-
-JUnit Test Cases
-
-You can use the following JUnit test cases. Mock the dependencies and test all edge cases:
-
-import static org.mockito.Mockito.*;
-import static org.junit.jupiter.api.Assertions.*;
-
-import java.util.Collections;
-import java.util.List;
-
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.mockito.InjectMocks;
-import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
-import org.springframework.http.ResponseEntity;
-
-class ReportsServiceImplTest {
-
-    @InjectMocks
-    private ReportsServiceImpl reportsService;
-
-    @Mock
-    private QuotesReportRepository quotesReportRepository;
-
-    @Mock
-    private AsgwyLkupRepository asgwyLkupRepository;
-
-    @Mock
-    private ScheduleReportsRepository scheduleReportsRepository;
-
-    @Mock
-    private AzureFileService azureFileService;
-
-    @BeforeEach
-    void setUp() {
-        MockitoAnnotations.openMocks(this);
-    }
-
-    @Test
-    void testDownloadOrScheduleQuotesReport_NoData() {
-        // Mock behavior
-        when(quotesReportRepository.findAll(any())).thenReturn(Collections.emptyList());
-
-        // Assert exception
-        assertThrows(AsgwyGlobalException.class, () ->
-                reportsService.downloadOrScheduleQuotesReport("user1", new ReportsRequest()));
-    }
-
-    @Test
-    void testDownloadReportByName_FileFound() throws Exception {
-        // Mock behavior
-        byte[] mockData = "Sample Data".getBytes();
-        when(azureFileService.downloadReportByName("test.csv")).thenReturn(mockData);
-
-        ResponseEntity<byte[]> response = reportsService.downloadReportByName("test.csv");
-
-        assertNotNull(response);
-        assertEquals(200, response.getStatusCodeValue());
-        assertArrayEquals(mockData, response.getBody());
-    }
-
-    @Test
-    void testDownloadReportByName_FileNotFound() throws Exception {
-        // Mock behavior
-        when(azureFileService.downloadReportByName(any())).thenThrow(new IOException("File not found"));
-
-        // Assert exception
-        assertThrows(AsgwyGlobalException.class, () ->
-                reportsService.downloadReportByName("nonexistent.csv"));
-    }
-
-    // Add more tests for CSV generation, scheduling, and exception handling...
-}
-
-The above example illustrates both mocked behaviors and edge cases in the ReportsServiceImpl.
