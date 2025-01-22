@@ -143,3 +143,61 @@ class ReportsServiceImplTest {
         assertEquals("Invalid threshold value", exception.getMessage());
     }
 }
+
+
+
+import org.springframework.data.jpa.domain.Specification;
+
+...
+
+@Test
+void downloadOrScheduleQuotesReport_NoDataFound_WithSpecification() {
+    // Mock an empty specification query result
+    Specification<QuotesReport> specification = (root, query, criteriaBuilder) -> criteriaBuilder.conjunction();
+    when(quotesReportRepository.findAll(eq(specification))).thenReturn(Collections.emptyList());
+
+    // Simulate the ReportsRequest to build the specification
+    Exception exception = assertThrows(AsgwyGlobalException.class, 
+        () -> reportsService.downloadOrScheduleQuotesReport("userId", reportsRequest));
+
+    assertEquals(HttpStatus.NO_CONTENT.value(), ((AsgwyGlobalException) exception).getStatusCode());
+    assertEquals("No Data found", exception.getMessage());
+
+    verify(quotesReportRepository, times(1)).findAll(any());
+}
+
+@Test
+void downloadOrScheduleQuotesReport_ThresholdExceeded_WithSpecification() {
+    // Mock a result where threshold is exceeded
+    int threshold = 1;
+    Specification<QuotesReport> specification = (root, query, criteriaBuilder) -> criteriaBuilder.conjunction();
+    List<QuotesReport> quotesReports = List.of(new QuotesReport(), new QuotesReport());
+    when(quotesReportRepository.findAll(eq(specification))).thenReturn(quotesReports);
+    when(asgwyLkupRepository.findValueByLabel(anyString())).thenReturn(String.valueOf(threshold));
+
+    Exception exception = assertThrows(AsgwyGlobalException.class, 
+        () -> reportsService.downloadOrScheduleQuotesReport("userId", reportsRequest));
+
+    assertEquals(HttpStatus.OK.value(), ((AsgwyGlobalException) exception).getStatusCode());
+    assertEquals("Report Got Scheduled", exception.getMessage());
+
+    verify(scheduleReportsRepository, times(1)).save(any());
+}
+
+@Test
+void downloadOrScheduleQuotesReport_ThresholdNotExceeded_WithSpecification() {
+    // Mock a result where threshold is not exceeded
+    int threshold = 5;
+    Specification<QuotesReport> specification = (root, query, criteriaBuilder) -> criteriaBuilder.conjunction();
+    List<QuotesReport> quotesReports = List.of(new QuotesReport(), new QuotesReport());
+    when(quotesReportRepository.findAll(eq(specification))).thenReturn(quotesReports);
+    when(asgwyLkupRepository.findValueByLabel(anyString())).thenReturn(String.valueOf(threshold));
+
+    ResponseEntity<byte[]> response = reportsService.downloadOrScheduleQuotesReport("userId", reportsRequest);
+
+    assertEquals(HttpStatus.CREATED, response.getStatusCode());
+    assertNotNull(response.getBody());
+    assertTrue(new String(response.getBody()).contains("Quotes_Report"));
+
+    verify(quotesReportRepository, times(1)).findAll(any());
+}
