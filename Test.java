@@ -201,3 +201,147 @@ void downloadOrScheduleQuotesReport_ThresholdNotExceeded_WithSpecification() {
 
     verify(quotesReportRepository, times(1)).findAll(any());
 }
+
+
+____________
+
+
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.*;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.jpa.domain.Specification;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+
+import java.io.IOException;
+import java.util.Collections;
+import java.util.List;
+
+@ExtendWith(MockitoExtension.class)
+class ReportsServiceImplTest {
+
+    @InjectMocks
+    private ReportsServiceImpl reportsService;
+
+    @Mock
+    private QuotesReportRepository quotesReportRepository;
+
+    @Mock
+    private AsgwyLkupRepository asgwyLkupRepository;
+
+    @Mock
+    private ScheduleReportsRepository scheduleReportsRepository;
+
+    @Mock
+    private AzureFileService azureFileService;
+
+    private ReportsRequest reportsRequest;
+
+    @BeforeEach
+    void setUp() {
+        reportsRequest = new ReportsRequest();
+        reportsRequest.setStateCd("NY");
+    }
+
+    @Test
+    void downloadOrScheduleQuotesReport_NoDataFound() {
+        // Mock the repository to return an empty list for the specification
+        Specification<QuotesReport> mockSpecification = mock(Specification.class);
+        when(quotesReportRepository.findAll(any(Specification.class))).thenReturn(Collections.emptyList());
+
+        Exception exception = assertThrows(AsgwyGlobalException.class,
+                () -> reportsService.downloadOrScheduleQuotesReport("userId", reportsRequest));
+
+        assertEquals(HttpStatus.NO_CONTENT.value(), ((AsgwyGlobalException) exception).getStatusCode());
+        assertEquals("No Data found", exception.getMessage());
+
+        verify(quotesReportRepository, times(1)).findAll(any(Specification.class));
+    }
+
+    @Test
+    void downloadOrScheduleQuotesReport_ThresholdExceeded() {
+        // Mock the repository to return a list exceeding the threshold
+        int threshold = 1;
+        Specification<QuotesReport> mockSpecification = mock(Specification.class);
+        when(quotesReportRepository.findAll(any(Specification.class)))
+                .thenReturn(List.of(new QuotesReport(), new QuotesReport()));
+        when(asgwyLkupRepository.findValueByLabel(anyString())).thenReturn(String.valueOf(threshold));
+
+        Exception exception = assertThrows(AsgwyGlobalException.class,
+                () -> reportsService.downloadOrScheduleQuotesReport("userId", reportsRequest));
+
+        assertEquals(HttpStatus.OK.value(), ((AsgwyGlobalException) exception).getStatusCode());
+        assertEquals("Report Got Scheduled", exception.getMessage());
+
+        verify(quotesReportRepository, times(1)).findAll(any(Specification.class));
+        verify(scheduleReportsRepository, times(1)).save(any(ScheduleReports.class));
+    }
+
+    @Test
+    void downloadOrScheduleQuotesReport_ThresholdNotExceeded() {
+        // Mock the repository to return a list not exceeding the threshold
+        int threshold = 5;
+        Specification<QuotesReport> mockSpecification = mock(Specification.class);
+        when(quotesReportRepository.findAll(any(Specification.class)))
+                .thenReturn(List.of(new QuotesReport(), new QuotesReport()));
+        when(asgwyLkupRepository.findValueByLabel(anyString())).thenReturn(String.valueOf(threshold));
+
+        ResponseEntity<byte[]> response = reportsService.downloadOrScheduleQuotesReport("userId", reportsRequest);
+
+        assertEquals(HttpStatus.CREATED, response.getStatusCode());
+        assertNotNull(response.getBody());
+
+        verify(quotesReportRepository, times(1)).findAll(any(Specification.class));
+    }
+
+    @Test
+    void downloadReportByName_Success() throws IOException {
+        String reportFileName = "test_report.csv";
+        byte[] fileData = "Sample File Content".getBytes();
+        when(azureFileService.downloadReportByName(reportFileName)).thenReturn(fileData);
+
+        ResponseEntity<byte[]> response = reportsService.downloadReportByName(reportFileName);
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertArrayEquals(fileData, response.getBody());
+        assertEquals("attachment; filename=" + reportFileName,
+                response.getHeaders().get(HttpHeaders.CONTENT_DISPOSITION).get(0));
+
+        verify(azureFileService, times(1)).downloadReportByName(reportFileName);
+    }
+
+    @Test
+    void downloadReportByName_FileNotFound() throws IOException {
+        String reportFileName = "test_report.csv";
+        when(azureFileService.downloadReportByName(reportFileName)).thenThrow(IOException.class);
+
+        Exception exception = assertThrows(AsgwyGlobalException.class,
+                () -> reportsService.downloadReportByName(reportFileName));
+
+        assertEquals(HttpStatus.INTERNAL_SERVER_ERROR.value(), ((AsgwyGlobalException) exception).getStatusCode());
+        assertEquals("Failed to download file", exception.getMessage());
+
+        verify(azureFileService, times(1)).downloadReportByName(reportFileName);
+    }
+
+    @Test
+    void scheduleReport_Success() {
+        when(scheduleReportsRepository.save(any(ScheduleReports.class))).thenAnswer(i -> i.getArgument(0));
+
+        Exception exception = assertThrows(AsgwyGlobalException.class,
+                () -> reportsService.scheduleReport("userId", reportsRequest));
+
+        assertEquals(HttpStatus.OK.value(), ((AsgwyGlobalException) exception).getStatusCode());
+        assertEquals("Report Got Scheduled", exception.getMessage());
+
+        verify(scheduleReportsRepository, times(1)).save(any(ScheduleReports.class));
+    }
+}
