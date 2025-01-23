@@ -1,104 +1,66 @@
-To enhance your implementation by using the OpenCSV library, you can replace the manual CSV generation in the generateCsvResponse method. OpenCSV is efficient and reduces the manual effort needed for handling CSV formatting. Here’s the updated method using OpenCSV:
+import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.web.reactive.function.client.ClientResponse;
+import reactor.core.publisher.Mono;
+import reactor.netty.http.client.HttpClient;
+import reactor.netty.transport.ProxyProvider;
 
-Dependency
+import java.time.Duration;
 
-First, ensure you have the OpenCSV dependency in your pom.xml if you’re using Maven:
+public class AVScanService {
 
-<dependency>
-    <groupId>com.opencsv</groupId>
-    <artifactId>opencsv</artifactId>
-    <version>5.8</version>
-</dependency>
+    private static final String BASE_URL = "https://sit1-api.cvshealth.com";
+    private static final String API_KEY = "your-api-key";
 
-Updated generateCsvResponse Method
+    public AVScanFileResponse downloadAVScanFile(String fileReference) {
+        try {
+            // Configure HttpClient with optional proxy and timeout
+            HttpClient httpClient = HttpClient.create()
+                    .responseTimeout(Duration.ofSeconds(30))  // Configure response timeout
+                    .proxy(proxy -> proxy.type(ProxyProvider.Proxy.HTTP)
+                            .host("your-proxy-host")
+                            .port(8080)); // Replace with proxy host/port if required
+            
+            // Create WebClient
+            WebClient webClient = WebClient.builder()
+                    .baseUrl(BASE_URL)
+                    .clientConnector(new ReactorClientHttpConnector(httpClient))
+                    .build();
 
-Replace the current implementation of generateCsvResponse with the following:
+            // Create headers
+            HttpHeaders headers = new HttpHeaders();
+            headers.add("Authorization", "Bearer " + getJwtToken(fileReference));
+            headers.add("x-api-key", API_KEY);
 
-private ResponseEntity<byte[]> generateCsvResponse(List<QuotesReport> quotesReportList, String stateCd) {
-    log.info("Generating CSV file using OpenCSV...");
-    try (ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
-         OutputStreamWriter writer = new OutputStreamWriter(byteArrayOutputStream, StandardCharsets.UTF_8);
-         CSVWriter csvWriter = new CSVWriter(writer)) {
+            // Make the API call
+            return webClient.method(HttpMethod.GET)
+                    .uri("/file/scan/download/v1/files/" + fileReference)
+                    .headers(httpHeaders -> httpHeaders.addAll(headers))
+                    .retrieve()
+                    .onStatus(
+                            status -> status.isError(),
+                            clientResponse -> {
+                                logError(clientResponse);
+                                return Mono.error(new RuntimeException("Error in AV scan download API"));
+                            })
+                    .bodyToMono(AVScanFileResponse.class)
+                    .retry(3) // Retry up to 3 times
+                    .block(Duration.ofSeconds(60)); // Block and wait for response
 
-        String stateCode = StringUtils.isNotBlank(stateCd) ? stateCd + "_" : "";
+        } catch (Exception e) {
+            // Log and throw custom exception
+            Log.error("Error in AV scan download API: {}", e.getMessage(), e);
+            throw new RuntimeException("Error in AV scan download API: " + e.getMessage(), e);
+        }
+    }
 
-        String filename = "Quotes_Report_" + stateCode + new Random().nextInt(99) + 1 + "_"
-                + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd")) + ".csv";
+    private void logError(ClientResponse clientResponse) {
+        clientResponse.bodyToMono(String.class).subscribe(body -> {
+            Log.error("Error response from API: Status = {}, Body = {}", clientResponse.statusCode(), body);
+        });
+    }
 
-        // Write header row
-        csvWriter.writeNext(AsgwyConstants.QuotesReportHeader());
-
-        // Write data rows
-        quotesReportList.stream()
-                .map(this::convertToCsvRowArray)
-                .forEach(csvWriter::writeNext);
-
-        csvWriter.flush();
-        byte[] csvBytes = byteArrayOutputStream.toByteArray();
-
-        HttpHeaders headers = createCsvHeaders(filename, csvBytes.length);
-        return ResponseEntity.status(HttpStatus.CREATED).headers(headers).body(csvBytes);
-
-    } catch (IOException e) {
-        log.error("Error generating CSV file", e);
-        throw new AsgwyGlobalException(HttpStatus.INTERNAL_SERVER_ERROR.value(), "Error generating CSV file");
+    private String getJwtToken(String fileReference) {
+        // Implement JWT token generation logic here
+        return "generated-token";
     }
 }
-
-Helper Method: Convert Report to Array
-
-Modify the convertToCsvRow method to return an array of strings:
-
-private String[] convertToCsvRowArray(QuotesReport report) {
-    return new String[]{
-        report.getAgentFirstName(),
-        report.getAgentLastName(),
-        report.getAgentNPN(),
-        report.getFirmName(),
-        report.getGaName(),
-        report.getGroupNm(),
-        report.getEmployerIdNbr(),
-        report.getGroupZipCd(),
-        report.getStateNm(),
-        report.getGroupLocAddrLine1Txt(),
-        report.getGroupLocAddrLine2Txt(),
-        report.getGroupLocCityNm(),
-        report.getCurrCarrierTypDesc(),
-        report.getCurrMedCarrierNm(),
-        report.getGrpMewaAssoc(),
-        report.getAetnaPeoInd(),
-        safeString(report.getEffectiveDt()),
-        safeString(report.getContractPeriodMoNbr()),
-        safeString(report.getEligibleEntrdCnt()),
-        safeString(report.getTotAvgEmpCnt()),
-        report.getSicCd(),
-        report.getSicNm(),
-        safeString(report.getDefBrokerFeeAmt()),
-        report.getUnionEmpInd(),
-        safeString(report.getUnionEmpCnt()),
-        report.getProductCd(),
-        safeString(report.getParticipationCnt()),
-        safeString(report.getEligibleDervdCnt()),
-        safeString(report.getWaiverCnt()),
-        safeString(report.getEligibleRetCnt()),
-        safeString(report.getCobraEmpCnt()),
-        safeString(report.getParticipationPct()),
-        safeString(report.getFtEqvlntCnt()),
-        report.getErisaCd(),
-        report.getCurrTpaNm(),
-        report.getAetnaSalesExe(),
-        safeString(report.getTestGroupInd()),
-        safeString(report.getConcessReqQuoteId()),
-        report.getConcessReqStatusCd(),
-        safeString(report.getConcessReqPct()),
-        report.getConcessReqReasonTxt()
-    };
-}
-
-Advantages of Using OpenCSV
-
-	1.	Simplified API: OpenCSV automatically handles escaping special characters (e.g., commas, quotes).
-	2.	Readability: The code is more concise and easier to maintain.
-	3.	Extensibility: It supports additional features like parsing and handling complex CSV files if needed later.
-
-This approach significantly improves your implementation’s efficiency and reliability.
