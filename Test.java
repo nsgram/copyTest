@@ -11,3 +11,16 @@ return chain.filter(exchange.mutate().build()).then(
 );
 
 
+try {
+    byte[] responseBody = new ObjectMapper().writeValueAsBytes(response);
+    exchange.getResponse().writeWith(
+        Mono.just(exchange.getResponse().bufferFactory().wrap(responseBody))
+    );
+} catch (JsonProcessingException e) {
+    return Mono.error(new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR, "Error processing response", e));
+}
+
+return chain.filter(exchange.mutate().build());
+
+
+
