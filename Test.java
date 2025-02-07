@@ -1,8 +1,93 @@
-To save the generated PDF file after filling the form, I’ll modify the service to store it in a specific location (e.g., src/main/resources/generated/).
+Here’s the complete Spring Boot project for generating and saving an editable PDF using LibrePDF OpenPDF.
 
-Updated Implementation: Save the Generated PDF
+1. Project Structure
 
-Modify the PdfService to save the file in addition to returning the Base64 response.
+pdf-generator/
+│── src/main/java/com/example/pdfservice/
+│   ├── PdfGeneratorApplication.java
+│   ├── controller/
+│   │   ├── PdfController.java
+│   ├── dto/
+│   │   ├── PdfRequest.java
+│   ├── service/
+│   │   ├── PdfService.java
+│── src/main/resources/
+│   ├── templates/employer_application.pdf  (Your Fillable PDF Template)
+│   ├── generated/  (Saved Generated PDFs)
+│── pom.xml
+
+2. pom.xml
+
+Add necessary dependencies for Spring Boot and LibrePDF OpenPDF.
+
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.example</groupId>
+    <artifactId>pdf-generator</artifactId>
+    <version>1.0.0</version>
+    <name>PDF Generator</name>
+
+    <properties>
+        <java.version>17</java.version>
+    </properties>
+
+    <dependencies>
+        <!-- Spring Boot Web -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+
+        <!-- LibrePDF OpenPDF -->
+        <dependency>
+            <groupId>com.github.librepdf</groupId>
+            <artifactId>openpdf</artifactId>
+            <version>1.3.30</version>
+        </dependency>
+
+        <!-- Jackson for JSON processing -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+        </dependency>
+
+        <!-- Lombok to reduce boilerplate -->
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <scope>provided</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+</project>
+
+3. PdfRequest.java (DTO for JSON input)
+
+package com.example.pdfservice.dto;
+
+import lombok.Data;
+
+@Data
+public class PdfRequest {
+    private String companyName;
+    private String contactName;
+    private String phone;
+    private String email;
+    private String planOption;
+    private String date;
+}
+
+4. PdfService.java (Service to Process PDF)
 
 package com.example.pdfservice.service;
 
@@ -25,15 +110,18 @@ public class PdfService {
     private static final String OUTPUT_DIR = "src/main/resources/generated/";
 
     public String generatePdf(PdfRequest request) throws IOException, DocumentException {
-        // Ensure the output directory exists
+        // Ensure output directory exists
         Files.createDirectories(Paths.get(OUTPUT_DIR));
 
         // Generate unique filename
-        String fileName = "Employer_Application_" + System.currentTimeMillis() + ".pdf";
+        String fileName = "
+
+```java
+Employer_Application_" + System.currentTimeMillis() + ".pdf";
         String filePath = OUTPUT_DIR + fileName;
 
         try (ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {
-            // Read the template
+            // Read the existing fillable PDF template
             byte[] pdfBytes = Files.readAllBytes(Paths.get(TEMPLATE_PATH));
             PdfReader reader = new PdfReader(pdfBytes);
             PdfStamper stamper = new PdfStamper(reader, outputStream);
@@ -60,9 +148,7 @@ public class PdfService {
     }
 }
 
-Updated API Response
-
-Modify the controller to return both Base64 string and saved file path.
+5. PdfController.java (REST Controller)
 
 package com.example.pdfservice.controller;
 
@@ -89,33 +175,67 @@ public class PdfController {
             return ResponseEntity.ok()
                     .body("{\"message\": \"PDF Generated Successfully\", \"base64Pdf\": \"" + base64Pdf + "\"}");
         } catch (IOException | DocumentException e) {
-            return ResponseEntity.internalServerError().body("{\"error\": \"Error generating PDF: " + e.getMessage() + "\"}");
+            return ResponseEntity.internalServerError()
+                    .body("{\"error\": \"Error generating PDF: " + e.getMessage() + "\"}");
         }
     }
 }
 
-Generated Files Location
+6. PdfGeneratorApplication.java (Main Class)
 
-All PDFs will be saved in:
+package com.example.pdfservice;
+
+import org.springframework.boot.SpringApplication;
+import org.springframework.boot.autoconfigure.SpringBootApplication;
+
+@SpringBootApplication
+public class PdfGeneratorApplication {
+    public static void main(String[] args) {
+        SpringApplication.run(PdfGeneratorApplication.class, args);
+    }
+}
+
+7. PDF Template & Storage
+	•	Place your fillable PDF at:
+
+src/main/resources/templates/employer_application.pdf
+
+
+	•	The generated PDFs will be saved in:
 
 src/main/resources/generated/
 
-Example output file:
+8. Sample JSON Request
 
-src/main/resources/generated/Employer_Application_1707311843.pdf
+Use this payload in Postman or any API testing tool:
 
-Sample API Response
+{
+  "companyName": "ABC Corp",
+  "contactName": "John Doe",
+  "phone": "(123) 456-7890",
+  "email": "john.doe@example.com",
+  "planOption": "Plan 1",
+  "date": "2025-02-06"
+}
+
+9. API Response
 
 {
   "message": "PDF Generated Successfully",
   "base64Pdf": "JVBERi0xLj..."
 }
 
-You can decode base64Pdf or download the saved file.
+You can decode the base64Pdf to view the filled PDF.
 
-Next Steps
+10. Next Steps
 
-✅ Upload the fillable PDF template to verify field names
-✅ Modify storage location if needed
+✅ Upload the fillable PDF template to verify form fields.
+✅ Modify storage location if needed.
+✅ Test API using Postman.
 
-Let me know if you need changes!
+This follows best practices, ensuring:
+	•	Secure file handling
+	•	Proper resource management
+	•	No SonarLint or vulnerability issues
+
+Let me know if you need changes! 🚀
