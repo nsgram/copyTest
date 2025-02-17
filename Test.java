@@ -1,3 +1,4 @@
+Job Duties
 1	Participating in the requirement gathering sessions, provide analysis support and track them using IBM Rational Jazz Team Server. Review of existing systems configurations and operating methods as well as understanding evolving business needs. 
 2	Attending high-level design solution sessions with Enterprise solution Architects and creating Application design specification documents, storing them in SharePoint. This phase establishes the framework for each phase of the software development lifecycle and a miss could impact the entire software solution.
 3	Solutioning, designing, programming and unit testing various applications/services using Cognizant tools and best practices/methods which would also include analyzing and achieving quality engineering and assurance of Quoting Center Core Framework Applications using including Java/J2ee, Spring Boot, Microservices, SQL Programming, SOAP, REST API, JDBC.
