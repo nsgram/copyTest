@@ -1,108 +1,214 @@
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.stereotype.Repository;
+@Getter
+@Setter
+@AllArgsConstructor
+@NoArgsConstructor
+@Builder
+@ToString
+public class SFDCReportEntity {
+	
+	@Id
+	@Column(name = "dummy_id")
+	@GeneratedValue(strategy = GenerationType.IDENTITY)
+	private Long dummyId;
 
-import java.math.BigDecimal;
-import java.sql.*;
-import java.util.ArrayList;
-import java.util.List;
+	@Column(name = "status_desc")
+	private String status_desc;
 
-@Repository
-@Slf4j
-public class QuotesReportRepository {
+	@Column(name = "group_state_cd")
+	private String group_state_cd;//not used ?
 
-    private final JdbcTemplate jdbcTemplate;
+	@Column(name = "create_dts")
+	private Date create_dts;//not used ?
+	
+	// Quote Performer
+	@Column(name = "quote_perfmr_type_cd")
+	private String quote_perfmr_type_cd;
+	@Column(name = "quote_perfmr_first_nm")
+	private String quote_perfmr_first_nm;
+	@Column(name = "quote_perfmr_last_nm ")
+	private String quote_perfmr_last_nm;
+	@Column(name = "quote_perfmr_address")
+	private String quote_perfmr_address;
+	@Column(name = "quote_perfmr_email_txt")
+	private String quote_perfmr_email_txt;
 
-    public QuotesReportRepository(JdbcTemplate jdbcTemplate) {
-        this.jdbcTemplate = jdbcTemplate;
-    }
+	// Quote Submitter
+	@Column(name = "quote_submtr_type_cd")
+	private String quote_submtr_type_cd;
+	@Column(name = "quote_submtr_first_nm")
+	private String quote_submtr_first_nm;
+	@Column(name = "quote_submtr_last_nm ")
+	private String quote_submtr_last_nm;
+	@Column(name = "quote_submtr_address")
+	private String quote_submtr_address;
+	@Column(name = "quote_submtr_email_txt")
+	private String quote_submtr_email_txt;
+	@Column(name = "quote_submtr_phone_nbr")
+	private String quote_submtr_phone_nbr;
 
-    public List<QuotesReportEntity> getReportsDataForCSV(RequestDetailsDTO requestDetailsDTO) throws SQLException {
-        StringBuilder sqlQuery = new StringBuilder();
-        List<Object> queryArgs = new ArrayList<>();
+	// Selling Agents
+	@Column(name = "quote_sa_full_nm")
+	private String quote_sa_full_nm;
+	@Column(name = "quote_sa_email_txt")
+	private String quote_sa_email_txt;
+	@Column(name = "quote_sa_phone_nbr")
+	private String quote_sa_phone_nbr;
 
-        sqlQuery.append("SELECT * FROM quotes_report_view WHERE 1=1");
+	// Firm
+	@Column(name = "quote_sa_agency_nm")
+	private String quote_sa_agency_nm;
+	@Column(name = "quote_sa_agency_addr")
+	private String quote_sa_agency_addr;
+	@Column(name = "quote_sa_agency_email_txt")
+	private String quote_sa_agency_email_txt;
+	@Column(name = "quote_sa_agency_phone_nbr")
+	private String quote_sa_agency_phone_nbr;
 
-        if (requestDetailsDTO.getFromEffectiveDt() != null && !requestDetailsDTO.getFromEffectiveDt().isEmpty()) {
-            sqlQuery.append(" AND effective_dt BETWEEN CAST(? AS DATE) AND CAST(? AS DATE)");
-            queryArgs.add(requestDetailsDTO.getFromEffectiveDt());
-            queryArgs.add(requestDetailsDTO.getToEffectiveDt());
-        }
-        if (requestDetailsDTO.getFromSubmissionDt() != null && !requestDetailsDTO.getFromSubmissionDt().isEmpty()) {
-            sqlQuery.append(" AND submission_dt BETWEEN CAST(? AS DATE) AND CAST(? AS DATE)");
-            queryArgs.add(requestDetailsDTO.getFromSubmissionDt());
-            queryArgs.add(requestDetailsDTO.getToSubmissionDt());
-        }
-        if (requestDetailsDTO.getStateCd() != null && !requestDetailsDTO.getStateCd().isEmpty()) {
-            sqlQuery.append(" AND group_state_cd = ?");
-            queryArgs.add(requestDetailsDTO.getStateCd());
-        }
-        if (requestDetailsDTO.getStatusDesc() != null && !requestDetailsDTO.getStatusDesc().isEmpty()) {
-            sqlQuery.append(" AND status_desc = ?");
-            queryArgs.add(requestDetailsDTO.getStatusDesc());
-        }
+	// General Agents
+	@Column(name = "quote_ga_sa_nm")
+	private String quote_ga_sa_nm;
+	@Column(name = "quote_ga_sa_email")
+	private String quote_ga_sa_email;
+	@Column(name = "quote_ga_sa_phone")
+	private String quote_ga_sa_phone;
+	
+	@Column(name = "quote_ga_agency_nm")
+	private String quote_ga_agency_nm;
+	@Column(name = "quote_ga_agency_email_txt")
+	private String quote_ga_agency_email_txt;
+	@Column(name = "quote_ga_agency_addr")
+	private String quote_ga_agency_addr;
+	@Column(name = "quote_ga_agency_phone_nbr")
+	private String quote_ga_agency_phone_nbr;
 
-        log.info("Generated SQL Query: {}", sqlQuery);
+	// Group
+	@Column(name = "group_id")
+	private Integer group_id;
+	@Column(name = "smart_group_id")
+	private Integer smart_group_id;
+	@Column(name = "group_nm")
+	private String group_nm;
+	@Column(name = "prior_psu_id")
+	private String prior_psu_id;
+	@Column(name = "employer_id_nbr")
+	private String employer_id_nbr;
+	@Column(name = "test_group_ind")
+	private Boolean test_group_ind;
+	@Column(name = "group_nm_upt_ind")
+	private String group_nm_upt_ind;
+	
+	// Quote Coverage
+	@Column(name = "quote_id")
+	private Integer quote_id;
+	@Column(name = "smart_quote_id")
+	private Integer smart_quote_id;
+	@Column(name = "group_zip_cd")
+	private String group_zip_cd;
+	@Column(name = "group_loc_city_nm")
+	private String group_loc_city_nm;
+	@Column(name = "state_nm")
+	private String state_nm;
+	
 
-        return jdbcTemplate.query(sqlQuery.toString(), (rs, rowNum) -> mapResultSetToEntity(rs), queryArgs.toArray());
-    }
 
-    private QuotesReportEntity mapResultSetToEntity(ResultSet rs) throws SQLException {
-        QuotesReportEntity entity = new QuotesReportEntity();
-        
-        // Mapping fields from ResultSet to entity
-        entity.setDummyId(rs.getLong("dummy_id"));
-        entity.setGroupNm(rs.getString("group_nm"));
-        entity.setEmployerIdNbr(rs.getString("employer_id_nbr"));
-        entity.setTestGroupInd(rs.getBoolean("test_group_ind"));
-        entity.setQuoteId(rs.getLong("quote_id"));
-        entity.setQuoteStatusCd(rs.getString("quote_status_cd"));
-        entity.setEffectiveDt(rs.getDate("effective_dt"));
-        entity.setGroupZipCd(rs.getString("group_zip_cd"));
-        entity.setGroupStateCd(rs.getString("group_state_cd"));
-        entity.setEligibleEntrdCnt(rs.getInt("eligible_entrd_cnt"));
-        entity.setUnionEmpInd(rs.getString("union_emp_ind"));
-        entity.setUnionEmpCnt(rs.getInt("union_emp_cnt"));
-        entity.setProductCd(rs.getString("product_cd"));
-        entity.setGroupLocAddrLine1Txt(rs.getString("group_loc_addr_line1_txt"));
-        entity.setGroupLocAddrLine2Txt(rs.getString("group_loc_addr_line2_txt"));
-        entity.setGroupLocCityNm(rs.getString("group_loc_city_nm"));
-        entity.setCurrCarrierTypDesc(rs.getString("curr_carrier_typ_desc"));
-        entity.setCurrMedCarrierNm(rs.getString("curr_med_carrier_nm"));
-        entity.setGrpMewaAssoc(rs.getString("grp_mewa_ind"));
-        entity.setAetnaPeoInd(rs.getString("aetna_peo_ind"));
-        entity.setContractPeriodMoNbr(rs.getInt("contract_period_mo_nbr"));
-        entity.setTotAvgEmpCnt(rs.getInt("tot_avg_emp_cnt"));
-        entity.setSicCd(rs.getString("sic_cd"));
-        entity.setSicNm(rs.getString("sic_nm"));
-        entity.setDefBrokerFeeAmt(rs.getBigDecimal("def_broker_fee_amt"));
-        entity.setParticipationCnt(rs.getInt("participation_cnt"));
-        entity.setEligibleDervdCnt(rs.getInt("eligible_dervd_cnt"));
-        entity.setWaiverCnt(rs.getInt("waiver_cnt"));
-        entity.setEligibleRetCnt(rs.getInt("eligible_ret_cnt"));
-        entity.setCobraEmpCnt(rs.getInt("cobra_emp_cnt"));
-        entity.setParticipationPct(rs.getBigDecimal("participation_pct"));
-        entity.setFtEqvlntCnt(rs.getInt("ft_eqvlnt_cnt"));
-        entity.setErisaCd(rs.getString("erisa_cd"));
-        entity.setCurrTpaNm(rs.getString("curr_tpa_nm"));
-        entity.setConcessReqStatusCd(rs.getString("concess_req_status_cd"));
-        entity.setConcessReqPct(rs.getBigDecimal("concess_req_pct"));
-        entity.setConcessReqReasonTxt(rs.getString("concess_req_reason_txt"));
-        entity.setConn_create_dts(rs.getTimestamp("conn_create_dts"));
-        entity.setCommentTxt(rs.getString("comment_txt"));
-        entity.setQuotesSAFullNm(rs.getString("quote_sa_full_nm"));
-        entity.setQuoteSANPN(rs.getString("quote_sa_npn"));
-        entity.setQuoteSAAgencyNm(rs.getString("quote_sa_agency_nm"));
-        entity.setQuoteSACfoNm(rs.getString("quote_sa_cfo_nm"));
-        entity.setQuoteSACfoLoc(rs.getString("quote_sa_cfo_loc"));
-        entity.setQuoteGAAgencyNm(rs.getString("quote_ga_agency_nm"));
-        entity.setQuoteGASACfoNm(rs.getString("quote_ga_sa_cfo_nm"));
-        entity.setQuoteGASACfoLoc(rs.getString("quote_ga_sa_cfo_loc"));
-        entity.setQuoteSalesExecFirstName(rs.getString("quote_sales_exec_first_name"));
-        entity.setQuoteSalesExecLastName(rs.getString("quote_sales_exec_last_name"));
-        entity.setStatusDesc(rs.getString("status_desc"));
-        entity.setCreateDts(rs.getDate("create_dts"));
+	// GroupWorkLocation
+	@Column(name = "group_loc_addr_line1_txt")
+	private String group_loc_addr_line1_txt;
+	@Column(name = "group_loc_addr_line2_txt")
+	private String group_loc_addr_line2_txt;
+	
+	@Column(name = "eligible_entrd_cnt")
+	private Integer eligible_entrd_cnt;
+	@Column(name = "union_emp_cnt")
+	private Integer union_emp_cnt;
+	@Column(name = "enrlng_emp_cnt")
+	private Integer enrlng_emp_cnt;
+	@Column(name = "waiver_cnt")
+	private Integer waiver_cnt;
+	@Column(name = "eligible_ret_cnt")
+	private Integer eligible_ret_cnt;
+	@Column(name = "cobra_emp_cnt")
+	private Integer cobra_emp_cnt;
+	@Column(name = "ft_eqvlnt_cnt")
+	private String ft_eqvlnt_cnt;
+	@Column(name = "tot_avg_emp_cnt")
+	private Integer tot_avg_emp_cnt;
+	@Column(name = "sic_cd")
+	private String sic_cd;
+	@Column(name = "effective_dt")
+	private Date effective_dt;
+	@Column(name = "quote_type_cd")
+	private String quote_type_cd;
 
-        return entity;
-    }
+	// Product Type
+	@Column(name = "product_cd")
+	private String product_cd;
+	@Column(name = "curr_med_carrier_nm")
+	private String curr_med_carrier_nm;
+	@Column(name = "doc_claimsexp_indicator")//new column
+	private String doc_claimsexp_indicator;
+	@Column(name = "renewal_dt")
+	private Date renewal_dt;
+	@Column(name = "sgr_ind")
+	private String sgr_ind;
+	@Column(name = "participation_pct")
+	private BigDecimal participation_pct;
+	@Column(name = "grp_mewa_ind")
+	private String grp_mewa_ind;
+
+	@Column(name = "curr_carrier_typ_desc")
+	private String curr_carrier_typ_desc;
+	@Column(name = "erisa_cd")
+	private String erisa_cd;
+	@Column(name = "contract_period_mo_nbr")
+	private Integer contract_period_mo_nbr;
+	@Column(name = "quote_sales_exec_first_name")
+	private String quote_sales_exec_first_name;
+	@Column(name = "quote_sales_exec_last_name")
+	private String quote_sales_exec_last_name;
+	
+	@Column(name = "ret_thold_ind")
+	private String ret_thold_ind;
+	@Column(name = "def_broker_fee_amt")
+	private BigDecimal def_broker_fee_amt;
+	@Column(name = "adj_broker_fee_amt")
+	private BigDecimal adj_broker_fee_amt;
+	@Column(name = "raf_type")
+	private String raf_type;
+	@Column(name = "doc_IMQ_indicator")//new column
+	private String doc_IMQ_indicator;
+	@Column(name = "doc_SBC_indicator")//new column
+	private String doc_SBC_indicator;
+	@Column(name = "doc_RC_indicator")//new column
+	private String doc_RC_indicator;
+	@Column(name = "rCDocUploadedIndicator") 
+	private String rCDocUploadedIndicator;
+	@Column(name = "concess_req_pct")
+	private BigDecimal concess_req_pct;
+	@Column(name = "concess_req_reason_txt")
+	private String concess_req_reason_txt;
+	@Column(name = "quote_concess_doc_ind")
+	private Character quote_concess_doc_ind;
+	@Column(name = "aetna_peo_ind")
+	private String aetna_peo_ind;
+
+	@Column(name = "doc_nm")//startW
+	private String doc_nm;
+	@Column(name = "doc_category")
+	private String doc_category;
+	@Column(name = "doc_subcategory")
+	private String doc_subcategory;
+	
+	//CFO
+	@Column(name = "quote_sa_CFO_nm")
+	private String quote_sa_CFO_nm;
+	@Column(name = "quote_sa_CFO_loc")
+	private String quote_sa_CFO_loc;
+	
+	@Column(name="quote_ga_sa_CFO_nm")
+	private String quote_ga_sa_CFO_nm;
+
+	@Column(name="quote_ga_sa_CFO_loc")
+	private String generalAgencyCFOLocation;
+
 }
