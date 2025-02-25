@@ -1,187 +1,178 @@
-package com.aetna.asgwy.webmw.avscan.filters;
+package com.example.gateway.filter;
 
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.security.NoSuchAlgorithmException;
-import java.security.PrivateKey;
-import java.security.spec.InvalidKeySpecException;
-import java.text.ParseException;
-import java.util.Base64;
-import java.util.Date;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-
-import org.apache.commons.lang3.StringUtils;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.cloud.gateway.filter.GatewayFilter;
-import org.springframework.cloud.gateway.filter.GatewayFilterChain;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.FileSystemResource;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpMethod;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
-import org.springframework.stereotype.Component;
+import org.springframework.http.*;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.server.ServerWebExchange;
-
-import com.aetna.asgwy.webmw.common.model.AVScanFileRequest;
-import com.aetna.asgwy.webmw.common.model.AVScanFileResponse;
-import com.aetna.asgwy.webmw.common.model.FileUploadDatail;
-import com.aetna.asgwy.webmw.common.model.FileUploadResponse;
-import com.aetna.asgwy.webmw.common.model.WebConstants;
-import com.aetna.asgwy.webmw.exception.AsgwyGlobalException;
-import com.aetna.asgwy.webmw.util.AVScanFileUtil;
-import com.aetna.framework.security.javacrypto.JavaCrypto;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.nimbusds.jose.JOSEException;
-import com.nimbusds.jose.JWEObject;
-import com.nimbusds.jose.JWSHeader;
-import com.nimbusds.jose.JWSObject;
-import com.nimbusds.jose.crypto.RSADecrypter;
-import com.nimbusds.jose.crypto.RSASSASigner;
-import com.nimbusds.jwt.JWTClaimsSet;
-import com.nimbusds.jwt.SignedJWT;
-
-import lombok.extern.slf4j.Slf4j;
+import org.springframework.web.server.WebFilterChain;
 import reactor.core.publisher.Mono;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
+import java.util.Map;
 
 @Slf4j
-@Component
-public class AVScanFileFilter implements GatewayFilter {
+public class AVScanFileFilter implements GlobalFilter {
 
-    @Value("${avscan.header.kid}")
-    private String kid;
-
-    @Value("${avscan.header.x-api-key}")
-    private String apiKey;
-
-    @Value("${avscan.download.uri}")
-    private String uri;
-
-    @Value("${gatewayapi.uri}")
-    private String gatewayapiUri;
-
-    @Value("${gatewayapi.basePath}")
-    private String gatewayapiBasePath;
-
-    @Value("${gatewayapi.fileURL}")
-    private String fileURL;
-
-    private final WebClient.Builder webClientBuilder;
     private final WebClient avProxyWebClient;
+    private final WebClient.Builder webClientBuilder;
+    private final ObjectMapper objectMapper;
+    private final String apiKey;
+    private final String uri;
+    private final String gatewayApiUri;
+    private final String gatewayApiBasePath;
+    private final String fileURL;
 
-    public AVScanFileFilter(WebClient.Builder webClientBuilder, WebClient avProxyWebClient) {
-        this.webClientBuilder = webClientBuilder;
+    public AVScanFileFilter(WebClient avProxyWebClient, WebClient.Builder webClientBuilder, ObjectMapper objectMapper,
+                            String apiKey, String uri, String gatewayApiUri, String gatewayApiBasePath, String fileURL) {
         this.avProxyWebClient = avProxyWebClient;
+        this.webClientBuilder = webClientBuilder;
+        this.objectMapper = objectMapper;
+        this.apiKey = apiKey;
+        this.uri = uri;
+        this.gatewayApiUri = gatewayApiUri;
+        this.gatewayApiBasePath = gatewayApiBasePath;
+        this.fileURL = fileURL;
     }
 
     @Override
-    public Mono<Void> filter(ServerWebExchange exchange, GatewayFilterChain chain) {
+    public Mono<Void> filter(ServerWebExchange exchange, WebFilterChain chain) {
         log.info("AVScanFileFilter.filter() Start...");
-        return exchange.getRequest().getBody().next().flatMap(dataBuffer -> {
-            try {
-                String body = dataBuffer.toString(StandardCharsets.UTF_8);
-                AVScanFileRequest avScanFileRequest = new ObjectMapper().readValue(body, AVScanFileRequest.class);
-                Map<String, Object> decodeJson = decodeEncryptedToken(avScanFileRequest.getAvToken());
 
-                String avFileRef = (String) decodeJson.get("cvs_av_file_ref");
-                String avFileClean = (String) decodeJson.get("cvs_av_is_file_clean");
+        return exchange.getRequest().getBody()
+            .next()
+            .flatMap(dataBuffer -> {
+                try {
+                    String body = dataBuffer.toString(StandardCharsets.UTF_8);
+                    AVScanFileRequest avScanFileRequest = objectMapper.readValue(body, AVScanFileRequest.class);
+                    Map<String, Object> decodeJson = decodeEncryptedToken(avScanFileRequest.getAvToken());
 
-                if ("Y".equalsIgnoreCase(avFileClean) && StringUtils.isNotBlank(avFileRef)) {
-                    return handleFileProcessing(avFileRef, decodeJson, avScanFileRequest, exchange)
+                    String avFileRef = (String) decodeJson.get("cvs_av_file_ref");
+                    String avFileClean = (String) decodeJson.get("cvs_av_is_file_clean");
+
+                    if ("Y".equalsIgnoreCase(avFileClean) && avFileRef != null) {
+                        log.info("File is clean, proceeding with download and upload.");
+
+                        return handleFileProcessing(avFileRef, decodeJson, avScanFileRequest, exchange)
                             .flatMap(response -> {
                                 exchange.getResponse().getHeaders().setContentType(MediaType.APPLICATION_JSON);
                                 exchange.getResponse().setStatusCode(HttpStatus.CREATED);
-                                return exchange.getResponse().writeWith(Mono.just(
-                                        exchange.getResponse().bufferFactory().wrap(new ObjectMapper().writeValueAsBytes(response))
-                                ));
+
+                                return exchange.getResponse().writeWith(
+                                    Mono.fromSupplier(() -> {
+                                        try {
+                                            return exchange.getResponse().bufferFactory()
+                                                .wrap(objectMapper.writeValueAsBytes(response));
+                                        } catch (JsonProcessingException e) {
+                                            throw new RuntimeException("Error serializing response", e);
+                                        }
+                                    })
+                                );
                             })
-                            .onErrorResume(e -> exceptionResponse(exchange, chain, HttpStatus.EXPECTATION_FAILED, e.getMessage()));
-                } else {
-                    return exceptionResponse(exchange, chain, HttpStatus.UNPROCESSABLE_ENTITY, "File appears to be unsafe.");
+                            .onErrorResume(e -> {
+                                log.error("Error during file processing: {}", e.getMessage(), e);
+                                return exceptionResponse(exchange, chain, HttpStatus.EXPECTATION_FAILED, e.getMessage());
+                            });
+                    } else {
+                        log.error("The uploaded file appears to be unsafe.");
+                        return exceptionResponse(exchange, chain, HttpStatus.UNPROCESSABLE_ENTITY, 
+                            "The uploaded file appears to be unsafe.");
+                    }
+                } catch (Exception e) {
+                    log.error("Error processing AVScanFileFilter: {}", e.getMessage(), e);
+                    return exceptionResponse(exchange, chain, HttpStatus.EXPECTATION_FAILED, 
+                        "Error processing request: " + e.getMessage());
                 }
-            } catch (Exception e) {
-                log.error("Error processing AVScanFileFilter: {}", e.getMessage(), e);
-                return exceptionResponse(exchange, chain, HttpStatus.EXPECTATION_FAILED, "Error processing request: " + e.getMessage());
-            }
-        });
-    }
-
-    private Map<String, Object> decodeEncryptedToken(String token) {
-        log.info("decodeEncryptedToken() start...");
-        try {
-            PrivateKey privateKey = AVScanFileUtil.readPrivateKey();
-            JWEObject jweObject = JWEObject.parse(token);
-            jweObject.decrypt(new RSADecrypter(privateKey));
-
-            SignedJWT signedJWT = SignedJWT.parse(jweObject.getPayload().toString());
-            return signedJWT.getJWTClaimsSet().toJSONObject();
-        } catch (Exception e) {
-            log.error("Error decoding token: {}", e.getLocalizedMessage());
-            throw new AsgwyGlobalException("Error decoding token: " + e.getLocalizedMessage());
-        }
+            });
     }
 
     private Mono<FileUploadResponse> handleFileProcessing(String avFileRef, Map<String, Object> decodeJson,
-            AVScanFileRequest avScanFileRequest, ServerWebExchange exchange) {
+                                                          AVScanFileRequest avScanFileRequest, ServerWebExchange exchange) {
+        return downloadAVScanFile(avFileRef)
+            .flatMap(avDownloadResponse -> {
+                String avFileDownloadKey = (String) decodeJson.get("cvs_av_file_download_key");
 
-        return Mono.fromCallable(() -> {
-            String tempDir = System.getProperty("java.io.tmpdir");
-            File tempFile = new File(tempDir, (String) decodeJson.get("cvs_av_original_file_name"));
-            
-            AVScanFileResponse avDownloadResponse = downloadAVScanFile(avFileRef);
-            String avFileDownloadKey = (String) decodeJson.get("cvs_av_file_download_key");
+                return Mono.fromCallable(() -> {
+                    String decodedContent = AVScanFileUtil.decryptValue(avDownloadResponse.getFile(), avFileDownloadKey);
+                    byte[] decodedBytes = Base64.getDecoder().decode(decodedContent);
 
-            try (FileOutputStream fos = new FileOutputStream(tempFile)) {
-                byte[] decodedBytes = Base64.getDecoder().decode(AVScanFileUtil.decryptValue(avDownloadResponse.getFile(), avFileDownloadKey));
-                fos.write(decodedBytes);
-            }
-
-            return tempFile;
-        }).flatMap(tempFile -> {
-            return uploadFileOnGateway(tempFile, avScanFileRequest, exchange)
-                    .doFinally(signal -> tempFile.delete());
-        });
+                    File tempFile = File.createTempFile("upload_", ".tmp");
+                    try (FileOutputStream fos = new FileOutputStream(tempFile)) {
+                        fos.write(decodedBytes);
+                    }
+                    return tempFile;
+                }).flatMap(tempFile -> uploadFileOnGateway(tempFile, avScanFileRequest, exchange)
+                    .doFinally(signalType -> {
+                        boolean deleted = tempFile.delete();
+                        log.info("Temporary file cleanup status: {}", deleted ? "SUCCESS" : "FAILED");
+                    })
+                );
+            });
     }
 
-    private AVScanFileResponse downloadAVScanFile(String fileReference) {
-        log.info("Downloading file from AVScan...");
+    private Mono<AVScanFileResponse> downloadAVScanFile(String fileReference) {
+        log.info("downloadAVScanFile() Start...");
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.add("x-api-key", apiKey);
+        headers.add("Authorization", getJwtToken(fileReference));
+
         return avProxyWebClient.get()
-                .uri(uri + fileReference)
-                .header("x-api-key", apiKey)
-                .header("Authorization", getJwtToken(fileReference))
-                .retrieve()
-                .bodyToMono(AVScanFileResponse.class)
-                .block();
+            .uri(uri + fileReference)
+            .headers(h -> h.addAll(headers))
+            .retrieve()
+            .onStatus(HttpStatus::isError, clientResponse -> {
+                log.error("Error in AVScan download file API");
+                return Mono.error(new AsgwyGlobalException("Error in AVScan download file API"));
+            })
+            .bodyToMono(AVScanFileResponse.class)
+            .doOnSuccess(response -> log.info("File Downloaded, statusDescription: {}", response.getStatusDescription()));
     }
 
-    private FileUploadResponse uploadFileOnGateway(File tempFile, AVScanFileRequest avScanFileRequest, ServerWebExchange exchange) {
-        log.info("Uploading file to gateway...");
+    private Mono<FileUploadResponse> uploadFileOnGateway(File tempFile, AVScanFileRequest avScanFileRequest, ServerWebExchange exchange) {
+        log.info("uploadFileOnGateway() Start...");
+
+        FileUploadDatail uploadDatail = avScanFileRequest.getUploadData();
         MultiValueMap<String, Object> formData = new LinkedMultiValueMap<>();
+        formData.add("quoteId", uploadDatail.getQuoteId());
+        formData.add("groupId", uploadDatail.getGroupId());
+        formData.add("docSubcategory", uploadDatail.getDocSubcategory());
         formData.add("file", new FileSystemResource(tempFile));
 
-        return webClientBuilder.build().post()
-                .uri(gatewayapiUri + gatewayapiBasePath + fileURL)
-                .contentType(MediaType.MULTIPART_FORM_DATA)
-                .bodyValue(formData)
-                .retrieve()
-                .bodyToMono(FileUploadResponse.class)
-                .block();
+        HttpHeaders headers = new HttpHeaders();
+        List<String> requestHeader = exchange.getRequest().getHeaders().get(WebConstants.TOKENVALUES);
+        if (requestHeader != null) {
+            JavaCrypto jc = new JavaCrypto();
+            String decryptedToken = jc.decrypt(requestHeader.get(0));
+            log.info("--decrypted tokenvals-- {}", decryptedToken);
+            headers.add("tokenvals", decryptedToken);
+        }
+
+        return webClientBuilder.build()
+            .post()
+            .uri(gatewayApiUri + gatewayApiBasePath + fileURL)
+            .contentType(MediaType.MULTIPART_FORM_DATA)
+            .bodyValue(formData)
+            .headers(h -> h.addAll(headers))
+            .retrieve()
+            .onStatus(HttpStatus::isError, clientResponse -> {
+                log.error("Exception in gateway upload file API");
+                return Mono.error(new AsgwyGlobalException("Exception in gateway upload file API"));
+            })
+            .bodyToMono(FileUploadResponse.class)
+            .doOnSuccess(response -> log.info("Upload successful, document ID: {}", response.getQuoteDocumentId()));
     }
 
-    private String getJwtToken(String fileReference) {
-        log.info("Generating JWT token...");
-        return "Bearer " + "your_jwt_token";
-    }
-
-    private Mono<Void> exceptionResponse(ServerWebExchange exchange, GatewayFilterChain chain, HttpStatus status, String message) {
+    private Mono<Void> exceptionResponse(ServerWebExchange exchange, WebFilterChain chain, HttpStatus status, String message) {
         exchange.getResponse().setStatusCode(status);
-        return exchange.getResponse().writeWith(Mono.just(exchange.getResponse().bufferFactory().wrap(message.getBytes())));
+        return exchange.getResponse().writeWith(
+            Mono.just(exchange.getResponse().bufferFactory().wrap(message.getBytes(StandardCharsets.UTF_8)))
+        );
     }
 }
