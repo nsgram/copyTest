@@ -1,178 +1,147 @@
-package com.example.gateway.filter;
+package com.aetna.asgwy.webmw.util;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.core.io.FileSystemResource;
-import org.springframework.http.*;
-import org.springframework.util.LinkedMultiValueMap;
-import org.springframework.util.MultiValueMap;
-import org.springframework.web.reactive.function.client.WebClient;
-import org.springframework.web.server.ServerWebExchange;
-import org.springframework.web.server.WebFilterChain;
-import reactor.core.publisher.Mono;
-import java.io.File;
-import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.StringReader;
 import java.nio.charset.StandardCharsets;
+import java.security.DigestException;
+import java.security.InvalidAlgorithmParameterException;
+import java.security.InvalidKeyException;
+import java.security.KeyFactory;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.security.PrivateKey;
+import java.security.Security;
+import java.security.spec.InvalidKeySpecException;
+import java.security.spec.PKCS8EncodedKeySpec;
+import java.util.Arrays;
 import java.util.Base64;
-import java.util.Map;
 
-@Slf4j
-public class AVScanFileFilter implements GlobalFilter {
+import javax.crypto.BadPaddingException;
+import javax.crypto.Cipher;
+import javax.crypto.IllegalBlockSizeException;
+import javax.crypto.NoSuchPaddingException;
+import javax.crypto.spec.IvParameterSpec;
+import javax.crypto.spec.SecretKeySpec;
 
-    private final WebClient avProxyWebClient;
-    private final WebClient.Builder webClientBuilder;
-    private final ObjectMapper objectMapper;
-    private final String apiKey;
-    private final String uri;
-    private final String gatewayApiUri;
-    private final String gatewayApiBasePath;
-    private final String fileURL;
+import org.bouncycastle.asn1.pkcs.PrivateKeyInfo;
+import org.bouncycastle.jce.provider.BouncyCastleProvider;
+import org.bouncycastle.openssl.PEMKeyPair;
+import org.bouncycastle.openssl.PEMParser;
+import org.bouncycastle.openssl.jcajce.JcaPEMKeyConverter;
 
-    public AVScanFileFilter(WebClient avProxyWebClient, WebClient.Builder webClientBuilder, ObjectMapper objectMapper,
-                            String apiKey, String uri, String gatewayApiUri, String gatewayApiBasePath, String fileURL) {
-        this.avProxyWebClient = avProxyWebClient;
-        this.webClientBuilder = webClientBuilder;
-        this.objectMapper = objectMapper;
-        this.apiKey = apiKey;
-        this.uri = uri;
-        this.gatewayApiUri = gatewayApiUri;
-        this.gatewayApiBasePath = gatewayApiBasePath;
-        this.fileURL = fileURL;
-    }
+public class AVScanFileUtil {
+	private static final String pemKey = "-----BEGIN RSA PRIVATE KEY-----\n"
+			+ "jsBQMakCgYEAyOQauRfM2UZAVMb0ohS25Xa6OcSQQfFSiH4rZ1IFklWP7c/Qoc+2\n"
+			+ "Vf4oi/gAzZyDf0/4aX31f6kVoUh74RF4x6nVhKRCQW6lAsx7oJ0hdRSS+FO4blRd\n"
+			+ "/riKn5Rp2RHo+lFl1ujS4abnAkLAhoii4M4Uo1GxYW0S7jj/PAud6RE=\n-----END RSA PRIVATE KEY-----";
 
-    @Override
-    public Mono<Void> filter(ServerWebExchange exchange, WebFilterChain chain) {
-        log.info("AVScanFileFilter.filter() Start...");
+	static {
+		Security.addProvider(new BouncyCastleProvider());
+	}
 
-        return exchange.getRequest().getBody()
-            .next()
-            .flatMap(dataBuffer -> {
-                try {
-                    String body = dataBuffer.toString(StandardCharsets.UTF_8);
-                    AVScanFileRequest avScanFileRequest = objectMapper.readValue(body, AVScanFileRequest.class);
-                    Map<String, Object> decodeJson = decodeEncryptedToken(avScanFileRequest.getAvToken());
+	public static PrivateKey readPrivateKey() throws IOException, NoSuchAlgorithmException, InvalidKeySpecException {
+		//String filePath = "src/main/resources/encryptionKeys/recipient-np-private-key-asg.pem";
+		//String privateKeyPEM = new String(Files.readAllBytes(Paths.get(filePath)));
+		String privateKeyPEM = new String(pemKey);
 
-                    String avFileRef = (String) decodeJson.get("cvs_av_file_ref");
-                    String avFileClean = (String) decodeJson.get("cvs_av_is_file_clean");
+		if (privateKeyPEM.contains("BEGIN RSA PRIVATE KEY")) {
+			return readPKCS1PrivateKey(pemKey);
+		} else {
+			return readPKCS8PrivateKey(privateKeyPEM);
+		}
+	}
 
-                    if ("Y".equalsIgnoreCase(avFileClean) && avFileRef != null) {
-                        log.info("File is clean, proceeding with download and upload.");
+	public static String decryptValue(String encryptedString, String key)
+			throws NoSuchAlgorithmException, NoSuchPaddingException, InvalidKeyException,
+			InvalidAlgorithmParameterException, IllegalBlockSizeException, BadPaddingException {
+		String decryptedText = "";
+		byte[] cipherData = Base64.getDecoder().decode(encryptedString);
+		byte[] saltData = Arrays.copyOfRange(cipherData, 8, 16);
 
-                        return handleFileProcessing(avFileRef, decodeJson, avScanFileRequest, exchange)
-                            .flatMap(response -> {
-                                exchange.getResponse().getHeaders().setContentType(MediaType.APPLICATION_JSON);
-                                exchange.getResponse().setStatusCode(HttpStatus.CREATED);
+		MessageDigest md5 = MessageDigest.getInstance("MD5");
+		final byte[][] keyAndIV = GenerateKeyAndIV(32, 16, 1, saltData, key.getBytes(StandardCharsets.UTF_8), md5);
+		SecretKeySpec keySpec = new SecretKeySpec(keyAndIV[0], "AES");
+		IvParameterSpec iv = new IvParameterSpec(keyAndIV[1]);
 
-                                return exchange.getResponse().writeWith(
-                                    Mono.fromSupplier(() -> {
-                                        try {
-                                            return exchange.getResponse().bufferFactory()
-                                                .wrap(objectMapper.writeValueAsBytes(response));
-                                        } catch (JsonProcessingException e) {
-                                            throw new RuntimeException("Error serializing response", e);
-                                        }
-                                    })
-                                );
-                            })
-                            .onErrorResume(e -> {
-                                log.error("Error during file processing: {}", e.getMessage(), e);
-                                return exceptionResponse(exchange, chain, HttpStatus.EXPECTATION_FAILED, e.getMessage());
-                            });
-                    } else {
-                        log.error("The uploaded file appears to be unsafe.");
-                        return exceptionResponse(exchange, chain, HttpStatus.UNPROCESSABLE_ENTITY, 
-                            "The uploaded file appears to be unsafe.");
-                    }
-                } catch (Exception e) {
-                    log.error("Error processing AVScanFileFilter: {}", e.getMessage(), e);
-                    return exceptionResponse(exchange, chain, HttpStatus.EXPECTATION_FAILED, 
-                        "Error processing request: " + e.getMessage());
-                }
-            });
-    }
+		byte[] encrypted = Arrays.copyOfRange(cipherData, 16, cipherData.length);
+		Cipher aesCBC = Cipher.getInstance("AES/CBC/PKCS5Padding");
+		aesCBC.init(Cipher.DECRYPT_MODE, keySpec, iv);
+		byte[] decryptedData = aesCBC.doFinal(encrypted);
+		decryptedText = new String(decryptedData, StandardCharsets.UTF_8);
 
-    private Mono<FileUploadResponse> handleFileProcessing(String avFileRef, Map<String, Object> decodeJson,
-                                                          AVScanFileRequest avScanFileRequest, ServerWebExchange exchange) {
-        return downloadAVScanFile(avFileRef)
-            .flatMap(avDownloadResponse -> {
-                String avFileDownloadKey = (String) decodeJson.get("cvs_av_file_download_key");
+		return decryptedText;
+	}
 
-                return Mono.fromCallable(() -> {
-                    String decodedContent = AVScanFileUtil.decryptValue(avDownloadResponse.getFile(), avFileDownloadKey);
-                    byte[] decodedBytes = Base64.getDecoder().decode(decodedContent);
+	private static PrivateKey readPKCS1PrivateKey(String pemKey) throws IOException {
+		try (PEMParser pemParser = new PEMParser(new StringReader(pemKey))) {
+			Object object = pemParser.readObject();
 
-                    File tempFile = File.createTempFile("upload_", ".tmp");
-                    try (FileOutputStream fos = new FileOutputStream(tempFile)) {
-                        fos.write(decodedBytes);
-                    }
-                    return tempFile;
-                }).flatMap(tempFile -> uploadFileOnGateway(tempFile, avScanFileRequest, exchange)
-                    .doFinally(signalType -> {
-                        boolean deleted = tempFile.delete();
-                        log.info("Temporary file cleanup status: {}", deleted ? "SUCCESS" : "FAILED");
-                    })
-                );
-            });
-    }
+			if (object instanceof PEMKeyPair) {
+				JcaPEMKeyConverter converter = new JcaPEMKeyConverter().setProvider("BC");
+				return converter.getPrivateKey(((PEMKeyPair) object).getPrivateKeyInfo());
+			} else if (object instanceof PrivateKeyInfo) {
+				JcaPEMKeyConverter converter = new JcaPEMKeyConverter().setProvider("BC");
+				return converter.getPrivateKey((PrivateKeyInfo) object);
+			} else {
+				throw new IOException("Unsupported key format.");
+			}
+		}
+	}
 
-    private Mono<AVScanFileResponse> downloadAVScanFile(String fileReference) {
-        log.info("downloadAVScanFile() Start...");
+	private static PrivateKey readPKCS8PrivateKey(String privateKeyPEM)
+			throws NoSuchAlgorithmException, InvalidKeySpecException {
+		privateKeyPEM = privateKeyPEM.replace("-----BEGIN PRIVATE KEY-----", "")
+				.replace("-----END PRIVATE KEY-----", "").replaceAll("\\s+", "");
 
-        HttpHeaders headers = new HttpHeaders();
-        headers.add("x-api-key", apiKey);
-        headers.add("Authorization", getJwtToken(fileReference));
+		byte[] keyBytes = Base64.getDecoder().decode(privateKeyPEM);
+		PKCS8EncodedKeySpec keySpec = new PKCS8EncodedKeySpec(keyBytes);
+		KeyFactory keyFactory = KeyFactory.getInstance("RSA");
+		return keyFactory.generatePrivate(keySpec);
+	}
 
-        return avProxyWebClient.get()
-            .uri(uri + fileReference)
-            .headers(h -> h.addAll(headers))
-            .retrieve()
-            .onStatus(HttpStatus::isError, clientResponse -> {
-                log.error("Error in AVScan download file API");
-                return Mono.error(new AsgwyGlobalException("Error in AVScan download file API"));
-            })
-            .bodyToMono(AVScanFileResponse.class)
-            .doOnSuccess(response -> log.info("File Downloaded, statusDescription: {}", response.getStatusDescription()));
-    }
+	private static byte[][] GenerateKeyAndIV(int keyLength, int ivLength, int iterations, byte[] salt, byte[] password,
+			MessageDigest md) {
 
-    private Mono<FileUploadResponse> uploadFileOnGateway(File tempFile, AVScanFileRequest avScanFileRequest, ServerWebExchange exchange) {
-        log.info("uploadFileOnGateway() Start...");
+		int digestLength = md.getDigestLength();
+		int requiredLength = (keyLength + ivLength + digestLength - 1) / digestLength * digestLength;
+		byte[] generatedData = new byte[requiredLength];
+		int generatedLength = 0;
 
-        FileUploadDatail uploadDatail = avScanFileRequest.getUploadData();
-        MultiValueMap<String, Object> formData = new LinkedMultiValueMap<>();
-        formData.add("quoteId", uploadDatail.getQuoteId());
-        formData.add("groupId", uploadDatail.getGroupId());
-        formData.add("docSubcategory", uploadDatail.getDocSubcategory());
-        formData.add("file", new FileSystemResource(tempFile));
+		try {
+			md.reset();
+			// Repeat process until sufficient data has been generated
+			while (generatedLength < keyLength + ivLength) {
 
-        HttpHeaders headers = new HttpHeaders();
-        List<String> requestHeader = exchange.getRequest().getHeaders().get(WebConstants.TOKENVALUES);
-        if (requestHeader != null) {
-            JavaCrypto jc = new JavaCrypto();
-            String decryptedToken = jc.decrypt(requestHeader.get(0));
-            log.info("--decrypted tokenvals-- {}", decryptedToken);
-            headers.add("tokenvals", decryptedToken);
-        }
+				// Digest data (last digest if available, password data, salt if available)
+				if (generatedLength > 0)
+					md.update(generatedData, generatedLength - digestLength, digestLength);
+				md.update(password);
+				if (salt != null)
+					md.update(salt, 0, 8);
+				md.digest(generatedData, generatedLength, digestLength);
 
-        return webClientBuilder.build()
-            .post()
-            .uri(gatewayApiUri + gatewayApiBasePath + fileURL)
-            .contentType(MediaType.MULTIPART_FORM_DATA)
-            .bodyValue(formData)
-            .headers(h -> h.addAll(headers))
-            .retrieve()
-            .onStatus(HttpStatus::isError, clientResponse -> {
-                log.error("Exception in gateway upload file API");
-                return Mono.error(new AsgwyGlobalException("Exception in gateway upload file API"));
-            })
-            .bodyToMono(FileUploadResponse.class)
-            .doOnSuccess(response -> log.info("Upload successful, document ID: {}", response.getQuoteDocumentId()));
-    }
+				// additional rounds
+				for (int i = 1; i < iterations; i++) {
+					md.update(generatedData, generatedLength, digestLength);
+					md.digest(generatedData, generatedLength, digestLength);
+				}
 
-    private Mono<Void> exceptionResponse(ServerWebExchange exchange, WebFilterChain chain, HttpStatus status, String message) {
-        exchange.getResponse().setStatusCode(status);
-        return exchange.getResponse().writeWith(
-            Mono.just(exchange.getResponse().bufferFactory().wrap(message.getBytes(StandardCharsets.UTF_8)))
-        );
-    }
+				generatedLength += digestLength;
+			}
+
+			// Copy key and IV into separate byte arrays
+			byte[][] result = new byte[2][];
+			result[0] = Arrays.copyOfRange(generatedData, 0, keyLength);
+			if (ivLength > 0)
+				result[1] = Arrays.copyOfRange(generatedData, keyLength, keyLength + ivLength);
+
+			return result;
+
+		} catch (DigestException e) {
+			throw new RuntimeException(e);
+		} finally {
+			// Clean out temporary data
+			Arrays.fill(generatedData, (byte) 0);
+		}
+	}
 }
