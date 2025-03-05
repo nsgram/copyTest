@@ -1,69 +1,23 @@
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import reactor.core.publisher.Mono;
-import java.util.List;
+private Mono<FileUploadResponse> uploadFileOnGateway(File tempFile, AVScanFileRequest avScanFileRequest,
+			ServerWebExchange exchange) {
+		log.info("uploadFileOnGateway() Start...");
+		MultiValueMap<String, Object> formData = getGatewayFileUploadRequest(tempFile, avScanFileRequest);
+		List<String> requestHeader = exchange.getRequest().getHeaders().get(WebConstants.TOKENVALUES);
 
-@RestController
-@RequestMapping("/api")
-public class MiddlewareController {
-
-    private final MiddlewareService middlewareservice;
-    private final JavaCrypto javaCrypto;
-    private final ObjectMapper mapper;
-
-    public MiddlewareController(MiddlewareService middlewareservice, JavaCrypto javaCrypto, ObjectMapper mapper) {
-        this.middlewareservice = middlewareservice;
-        this.javaCrypto = javaCrypto;
-        this.mapper = mapper;
-    }
-
-    @GetMapping(value = "/refreshtoken", produces = "application/json")
-    public Mono<ResponseEntity<String>> getUserToken(ServerWebExchange exchange) {
-        log.info("Middleware controller | getUserToken ");
-
-        return Mono.fromCallable(() -> {
-            List<String> strHeaders = exchange.getRequest().getHeaders().get("tokens");
-            if (strHeaders == null || strHeaders.isEmpty()) {
-                log.warn("Middleware controller | getUserToken | Missing token header");
-                return ResponseEntity.badRequest().body("{\"error\":\"Missing token header\"}");
-            }
-
-            String strEncrtTkn = strHeaders.get(0);
-            if (strEncrtTkn.isBlank()) {
-                log.warn("Middleware controller | getUserToken | Empty token received");
-                return ResponseEntity.badRequest().body("{\"error\":\"Empty token received\"}");
-            }
-
-            try {
-                String decryptedTkn = javaCrypto.decrypt(strEncrtTkn);
-                log.info("Middleware controller | getUserToken | Decrypted token: {}", decryptedTkn);
-
-                Tokens tokenObj = mapper.readValue(decryptedTkn, Tokens.class);
-                String refreshTkn = tokenObj.getRefreshToken();
-
-                Tokens newToken = middlewareservice.obtainToken("", refreshTkn);
-                String encryptedToken = javaCrypto.encrypt(mapper.writeValueAsString(newToken));
-
-                log.info("Middleware controller | getUserToken | Successfully encrypted new token");
-
-                HttpHeaders responseHeaders = new HttpHeaders();
-                responseHeaders.add("Content-Type", "application/json");
-                responseHeaders.add("X-Content-Type-Options", "nosniff");
-
-                return ResponseEntity.ok()
-                        .headers(responseHeaders)
-                        .body("{\"token\":\"" + encryptedToken + "\"}");
-
-            } catch (Exception e) {
-                log.error("Middleware controller | getUserToken | Error processing token", e);
-                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                        .body("{\"error\":\"Internal server error\"}");
-            }
-        });
-    }
-}
+		JavaCrypto jc = new JavaCrypto();
+		String token = "";
+		HttpHeaders headers = new HttpHeaders();
+		if (requestHeader != null) {
+			token = requestHeader.get(0);
+			headers.add(TOKENVALS, jc.decrypt(token));
+		}
+		return webClientBuilder.build().post().uri(gatewayapiUri + gatewayapiBasePath + fileURL)
+				.contentType(MediaType.MULTIPART_FORM_DATA).bodyValue(formData).headers(h -> h.addAll(headers))
+				.retrieve().onStatus(status -> !status.is2xxSuccessful(),
+						clientResponse -> clientResponse.bodyToMono(String.class).flatMap(errorBody -> {
+							log.error(" Exception raised in gateway file upload api at gateway end ");
+							throw new AsgwyGlobalException("Exception in gateway file upload api");
+						}))
+				.bodyToMono(FileUploadResponse.class).doOnSuccess(
+						response -> log.info("Upload successful, document ID :::" + response.getQuoteDocumentId()));
+	}
