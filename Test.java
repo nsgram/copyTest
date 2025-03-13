@@ -1,4 +1,9 @@
-{
+curl -X 'POST' \
+  'https://api.na2.documents.adobe.com/api/rest/v6/agreements' \
+  -H 'accept: application/json' \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer 3AAABLblqZhAGDFfvYVDORbzoUnKCkbG7PeSsy3wlPkAWvORfmQbE5OQZxpEzbJAB7BRA3_3qYeUqkWyvNkITfabRokoDZElC' \
+  -d '{
     "fileInfos": [
         {
             "document": null,
@@ -73,7 +78,7 @@
     "isDocumentRetentionApplied": null,
     "locale": null,
     "mergeFieldInfo": null,
-    "message": "\nThank you for applying for insurance with Accendo Insurance Company. This email contains instructions for Applicant, Owner (if applicable) to apply electronic signature on the application and related documents.\n\nInstructions for Applicant(s)\n\nBefore you sign, please review the application for accuracy and completeness. If you have any questions, contact your agent. Please do not reply to this e-mail. To get started, please click on the 'Review and Sign' button above. Your unique password is the last 4 digits of your SSN.\n\nInstructions for Owner(if applicable)\n\nBefore you sign, please review the application for accuracy and completeness. If you have any questions, contact your agent. Please do not reply to this e-mail. To get started, please click on the 'Review and Sign' button above. Your unique password is the last 4 digits of your SSN.\n\nAfter all email signatures are completed, application will be automatically sent to our home office for processing",
+    "message": "\nThank you for applying for insurance with Accendo Insurance Company. This email contains instructions for Applicant, Owner (if applicable) to apply electronic signature on the application and related documents.\n\nInstructions for Applicant(s)\n\nBefore you sign, please review the application for accuracy and completeness. If you have any questions, contact your agent. Please do not reply to this e-mail. To get started, please click on the '\''Review and Sign'\'' button above. Your unique password is the last 4 digits of your SSN.\n\nInstructions for Owner(if applicable)\n\nBefore you sign, please review the application for accuracy and completeness. If you have any questions, contact your agent. Please do not reply to this e-mail. To get started, please click on the '\''Review and Sign'\'' button above. Your unique password is the last 4 digits of your SSN.\n\nAfter all email signatures are completed, application will be automatically sent to our home office for processing",
     "postSignOption": null,
     "reminderFrequency": null,
     "securityOption": null,
@@ -81,4 +86,9 @@
     "status": null,
     "vaultingInfo": null,
     "workflowId": null
+}
+'
+Response
+{
+  "id": "CBJCHBCAABAA99jurZPdI2CVydkQuFrF8dCz5F8q3rXQ"
 }
