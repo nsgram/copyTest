@@ -119,6 +119,8 @@ Response
 }
 
 I want to integrate above rest api in the Spring boot applications rest api
+Use Dynamic api call url from response of first request
+Accept all required values as JSON request
 response of first request in an input of request second
 response of Second request in an input of request third
 
