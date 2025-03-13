@@ -1,115 +1,127 @@
-If your Azure Kubernetes Service (AKS) is not accepting requests larger than 1MB, the issue is likely due to one of the following factors:
-
-1. Ingress Controller Limits
-
-If you are using NGINX Ingress Controller, it has a default request body size limit of 1MB. You can increase it by adding the following annotation to your Ingress resource:
-
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: my-ingress
-  annotations:
-    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
-spec:
-  rules:
-    - host: myapp.example.com
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: my-service
-                port:
-                  number: 80
-
-🔹 Change "50m" to your desired size, such as "100m" for 100MB.
-
-After updating the Ingress resource, restart the NGINX controller:
-
-kubectl rollout restart deployment nginx-ingress-controller -n kube-system
-
-
-
-⸻
-
-2. AKS Load Balancer Limit
-
-If you are using the Azure Application Gateway as an Ingress Controller, you need to update the request-body-size limit in the ConfigMap:
-
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: appgw-ingress-config
-  namespace: kube-system
-data:
-  request-body-size: "50m"
-
-After updating, restart the Application Gateway Ingress Controller:
-
-kubectl delete pod -n kube-system -l app=ingress-azure
-
-
-
-⸻
-
-3. NGINX Configuration Inside AKS Pods
-
-If your application is running inside an NGINX-based container, modify nginx.conf:
-
-http {
-    client_max_body_size 50M;
+Request 1
+curl -X 'GET' \
+  'https://aetna.na1.adobesign.com/api/rest/v6/baseUris' \
+  -H 'accept: application/json' \
+  -H 'Authorization: Bearer 3AAABLblqZhAGDFfvYVDORbzoUnKCkbG7PeSsy3wlPkAWvORfmQbE5OQZxpEzbJAB7BRA3_3qYeUqkWyvNkITfabRokoDZElC'
+Response
+{
+  "apiAccessPoint": "https://api.na2.documents.adobe.com/",
+  "webAccessPoint": "https://na2.documents.adobe.com/"
 }
 
-Then restart your pods:
+Request 2
+curl -X 'POST' \
+  'https://api.na2.documents.adobe.com/api/rest/v6/transientDocuments' \
+  -H 'accept: application/json' \
+  -H 'Content-Type: multipart/form-data' \
+  -H 'Authorization: Bearer 3AAABLblqZhAGDFfvYVDORbzoUnKCkbG7PeSsy3wlPkAWvORfmQbE5OQZxpEzbJAB7BRA3_3qYeUqkWyvNkITfabRokoDZElC' \
+  -F 'File-Name=Proposal' \
+  -F 'File=@Proposal.pdf;type=application/pdf'
+Response
+{
+  "transientDocumentId": "CBSCTBABDUAAABACAABAAeZ4mh3uIRO6nLuRJLKl5fpVy6oLf_OPbZvBd4mTYBXzIT7rNs5I-VaNYUzEBZ39mKO4qlZziB7XF3wLWEGq5l2OmlS8BWYfw4LqJuULDhlcgHtvVQOSot2OHxVGwRcfAEJmcqCZ4Qx-N3E-mDPW5T3lm6QkjHpfxhuy6Ix5xFkYPtZoz_mZHfoBB9kKX_d4R98mP9xrTk1-XYDyuta0mZC-d8TxldOyOJKbvbHj9ZR1AnS-phmKBGRS0YdbNs5AUzB57BPYXtZgSvn9DivZTwTytpyeIjriJnaiAV8DMBIJymWZLoprJK2a5RZzatj3G_jeyeCO3oUZ2i8nI8TqFo2KSyLN6FnDhzihKwOKiHfw*"
+}
 
-kubectl rollout restart deployment my-deployment
+Request 3
+curl -X 'POST' \
+  'https://api.na2.documents.adobe.com/api/rest/v6/agreements' \
+  -H 'accept: application/json' \
+  -H 'Content-Type: application/json' \
+  -H 'Authorization: Bearer 3AAABLblqZhAGDFfvYVDORbzoUnKCkbG7PeSsy3wlPkAWvORfmQbE5OQZxpEzbJAB7BRA3_3qYeUqkWyvNkITfabRokoDZElC' \
+  -d '{
+    "fileInfos": [
+        {
+            "document": null,
+            "label": null,
+            "libraryDocumentId": null,
+            "transientDocumentId": "CBSCTBABDUAAABACAABAAeZ4mh3uIRO6nLuRJLKl5fpVy6oLf_OPbZvBd4mTYBXzIT7rNs5I-VaNYUzEBZ39mKO4qlZziB7XF3wLWEGq5l2OmlS8BWYfw4LqJuULDhlcgHtvVQOSot2OHxVGwRcfAEJmcqCZ4Qx-N3E-mDPW5T3lm6QkjHpfxhuy6Ix5xFkYPtZoz_mZHfoBB9kKX_d4R98mP9xrTk1-XYDyuta0mZC-d8TxldOyOJKbvbHj9ZR1AnS-phmKBGRS0YdbNs5AUzB57BPYXtZgSvn9DivZTwTytpyeIjriJnaiAV8DMBIJymWZLoprJK2a5RZzatj3G_jeyeCO3oUZ2i8nI8TqFo2KSyLN6FnDhzihKwOKiHfw*",
+            "urlFileInfo": null
+        }
+    ],
+    "name": " - Application for insurance",
+    "participantSetsInfo": [
+        {
+            "memberInfos": [
+                {
+                    "email":  "lavater@aetna.com",
+                    "securityOption": {
+                        "phoneInfo": {
+                            "countryCode": "+1",
+                            "countryIsoCode": null,
+                            "phone": "3331212121"
+                        }
+                    }
+                }
+            ],
+            "order": 1,
+            "role": "SIGNER",
+            "label": null,
+            "name": null,
+            "privateMessage": null,
+            "visiblePages": null
+        },
+        {
+            "memberInfos": [
+                {
+                    "email": "lavater@aetna.com",
+                    "securityOption": {
+                        "phoneInfo": {
+                            "countryCode": "+1",
+                            "countryIsoCode": null,
+                            "phone": "3331212121"
+                        }
+                    }
+                }
+            ],
+            "order": 2,
+            "role": "SIGNER",
+            "label": null,
+            "name": null,
+            "privateMessage": null,
+            "visiblePages": null
+        }
+    ],
+    "signatureType": "ESIGN",
+    "state": "IN_PROCESS",
+    "ccs": [
+        {
+            "email": "lavater@aetna.com",
+            "label": null,
+            "visiblePages": null
+        }
+    ],
+    "createdDate": null,
+    "deviceInfo": null,
+    "documentVisibilityEnabled": null,
+    "emailOption": null,
+    "expirationTime": null,
+    "externalId": null,
+    "firstReminderDelay": null,
+    "formFieldLayerTemplates": null,
+    "groupId": null,
+   "id": null,
+    "isDocumentRetentionApplied": null,
+    "locale": null,
+    "mergeFieldInfo": null,
+    "message": "\nThank you for applying for insurance with Accendo Insurance Company. This email contains instructions for Applicant, Owner (if applicable) to apply electronic signature on the application and related documents.\n\nInstructions for Applicant(s)\n\nBefore you sign, please review the application for accuracy and completeness. If you have any questions, contact your agent. Please do not reply to this e-mail. To get started, please click on the '\''Review and Sign'\'' button above. Your unique password is the last 4 digits of your SSN.\n\nInstructions for Owner(if applicable)\n\nBefore you sign, please review the application for accuracy and completeness. If you have any questions, contact your agent. Please do not reply to this e-mail. To get started, please click on the '\''Review and Sign'\'' button above. Your unique password is the last 4 digits of your SSN.\n\nAfter all email signatures are completed, application will be automatically sent to our home office for processing",
+    "postSignOption": null,
+    "reminderFrequency": null,
+    "securityOption": null,
+    "senderEmail": null,
+    "status": null,
+    "vaultingInfo": null,
+    "workflowId": null
+}
+'
+Response
+{
+  "id": "CBJCHBCAABAA99jurZPdI2CVydkQuFrF8dCz5F8q3rXQ"
+}
 
+I want to integrate above rest api in the Spring boot applications rest api
+response of first request in an input of request second
+response of Second request in an input of request third
 
-
-⸻
-
-4. API Gateway (APIM) Limitations
-
-If your request goes through Azure API Management (APIM) before reaching AKS, ensure the content-length limit is configured in Azure API Management policies:
-
-<inbound>
-    <base />
-    <set-header name="Content-Length" exists-action="override">
-        <value>52428800</value> <!-- 50MB -->
-    </set-header>
-</inbound>
-
-
-
-⸻
-
-5. Web Application Firewall (WAF) Rules
-
-If AKS is behind Azure WAF, update the WAF policy:
-	1.	Go to Azure Portal → WAF Policy
-	2.	Increase the Max Request Body Size (default is 128 KB)
-	3.	Save changes and restart your Ingress Controller or Application Gateway
-
-⸻
-
-6. Check Your Application Code
-
-If the API itself enforces a max request size, increase the limit in Spring Boot:
-
-For Spring Boot WebFlux:
-
-spring.codec.max-in-memory-size=50MB
-server.tomcat.max-swallow-size=50MB
-
-
-
-⸻
-
-Final Steps
-
-✅ After making these changes, restart your AKS pods and test the upload again.
-
-kubectl delete pod --all -n my-namespace
-
-This should resolve the 1MB request size limitation in AKS. Let me know if you need more details!
+I want created new post endpoint in spring boot apllication 
+Use latest java api
+remove all sonar and check marx issue
