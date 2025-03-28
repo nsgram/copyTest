@@ -9,11 +9,11 @@
 				.groupNm("Test BDD Group").effectiveDt(new java.util.Date()).groupStateCd("MN").censusCount(40)
 				.customerContact(List.of(customerContact)).memberInfo(memberInfo).build();
 		requestSpecification.header(AsgwyConstantsTest.KEY_IDENT_TOKEN_KEY, AsgwyConstantsTest.KEY_IDENT_TOKEN_VALUES);
-
-		ObjectMapper objectMapper = new ObjectMapper();
-		String req = objectMapper.writeValueAsString(request);
-		requestSpecification.body(req);
+		requestSpecification.body(request);
 
 		successResponse = requestSpecification.post("/v1/quote/esign/banking-consent");
 
 	}
+getting Below error
+
+ Resolved [org.springframework.http.converter.HttpMessageNotReadableException: JSON parse error: Cannot deserialize value of type `java.util.Date` from String "03/28/2025": not a valid representation (error: Failed to parse Date value '03/28/2025': Cannot parse date "03/28/2025": not compatible with any of standard forms ("yyyy-MM-dd'T'HH:mm:ss.SSSX", "yyyy-MM-dd'T'HH:mm:ss.SSS", "EEE, dd MMM yyyy HH:mm:ss zzz", "yyyy-MM-dd"))]
