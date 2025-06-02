@@ -1,13 +1,1 @@
- @Operation(
-    summary = "Save Broker Certification",
-    requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(
-        required = true,
-        content = @Content(schema = @Schema(implementation = BrokerCertificationRequest.class))
-    )
-)
-@PostMapping("/brokercertification")
-public ResponseEntity<Object> saveBrokerCertification(
-        @RequestBody BrokerCertificationRequest brokerCertificationRequest,
-        HttpServletRequest httpServletRequest) {
-    ...
-}
+https://teams.microsoft.com/l/meetup-join/19%3ameeting_YjdjN2JlYzktNWNkNy00Y2Y1LTg3NDUtYmQwZTIwZTM1ZTQz%40thread.v2/0?context=%7b%22Tid%22%3a%22fabb61b8-3afe-4e75-b934-a47f782b8cd7%22%2c%22Oid%22%3a%2253f5ce2d-4e64-452b-bcdb-8e856a634b09%22%7d
